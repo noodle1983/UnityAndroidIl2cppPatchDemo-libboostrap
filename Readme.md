@@ -48,6 +48,12 @@ ndk环境设好，双击build_android.bat。
 
 最后，有bug说一声，我会抽空看；如果谁fork了一份代码，修了bug，也可以和我说一声，我会merge回来。
 
+# 7. 随缘
+
+[PayPal:https://www.paypal.me/noodle1983](https://www.paypal.me/noodle1983)
+
+Or Alipay:![avatar](https://raw.githubusercontent.com/noodle1983/private/master/qr_icon/noodle1983_ali.png)
+Or Wechat:![avatar](https://raw.githubusercontent.com/noodle1983/private/master/qr_icon/noodle1983_wx.png)
 
 
 
