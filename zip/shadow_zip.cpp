@@ -5,6 +5,7 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <assert.h>
+#include <memory>
 
 using namespace android;
 
@@ -52,6 +53,12 @@ static int parse_apk(const char* _path, std::vector<ZipEntry*>& _all_entries)
     EndOfCentralDir endOfCentralDir;
 
     FILE *fp = fopen(_path, "rb");
+	if (fp == NULL){
+		MY_ERROR("failure parse file %s", _path);
+        return -1;
+	}
+	std::shared_ptr<FILE> autoDel(fp, [](FILE* fp){::fclose(fp);});
+	
     fseek(fp, 0, SEEK_END);
     fileLength = ftell(fp);
     rewind(fp);
@@ -513,6 +520,17 @@ FILE* ShadowZip::prepare_file(int _file_index)
 {
     if (fp_array_[_file_index] != NULL ){
         return fp_array_[_file_index];
+    }
+	
+	//incace of too many file opened, close all except base.apk
+	for(int i = 1; i < fp_array_.size(); i++) 
+    {
+		FILE* fp = fp_array_[i];
+		if (fp) {		
+			MY_METHOD("fclose -> 0x%08x fp%d at 0x%08lx", (size_t)stream, i, old_ftell(fp));
+			old_fclose(fp);
+			fp_array_[i] = NULL;
+		}
     }
 
     std::string& path = g_shadowzip_global_data->all_files_[_file_index];
