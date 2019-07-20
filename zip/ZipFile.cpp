@@ -43,7 +43,7 @@ using namespace android;
 //    else if (err == EACCES)
 //        return PERMISSION_DENIED;
 //    else
-//        return UNKNOWN_ERROR;
+//        return (status_t)UNKNOWN_ERROR;
 //}
 //
 ///*
@@ -230,14 +230,14 @@ using namespace android;
 //    }
 //    if (fseek(mZipFp, seekStart, SEEK_SET) != 0) {
 //        ALOGD("Failure seeking to end of zip at %ld", (long) seekStart);
-//        result = UNKNOWN_ERROR;
+//        result = (status_t)UNKNOWN_ERROR;
 //        goto bail;
 //    }
 //
 //    /* read the last part of the file into the buffer */
 //    if (fread(buf, 1, readAmount, mZipFp) != (size_t) readAmount) {
 //        ALOGD("short file? wanted %ld\n", readAmount);
-//        result = UNKNOWN_ERROR;
+//        result = (status_t)UNKNOWN_ERROR;
 //        goto bail;
 //    }
 //
@@ -289,7 +289,7 @@ using namespace android;
 //    if (fseek(mZipFp, mEOCD.mCentralDirOffset, SEEK_SET) != 0) {
 //        ALOGD("Failure seeking to central dir offset %ld\n",
 //             mEOCD.mCentralDirOffset);
-//        result = UNKNOWN_ERROR;
+//        result = (status_t)UNKNOWN_ERROR;
 //        goto bail;
 //    }
 //
@@ -324,7 +324,7 @@ using namespace android;
 //        }
 //        if (ZipEntry::getLongLE(checkBuf) != EndOfCentralDir::kSignature) {
 //            ALOGD("EOCD read check failed\n");
-//            result = UNKNOWN_ERROR;
+//            result = (status_t)UNKNOWN_ERROR;
 //            goto bail;
 //        }
 //        ALOGV("+++ EOCD read check passed\n");
@@ -380,7 +380,7 @@ using namespace android;
 //    }
 //
 //    if (fseek(mZipFp, mEOCD.mCentralDirOffset, SEEK_SET) != 0) {
-//        result = UNKNOWN_ERROR;
+//        result = (status_t)UNKNOWN_ERROR;
 //        goto bail;
 //    }
 //
@@ -462,7 +462,7 @@ using namespace android;
 //                        &compressedLen, &crc);
 //        if (!scanResult || method != ZipEntry::kCompressDeflated) {
 //            ALOGD("this isn't a deflated gzip file?");
-//            result = UNKNOWN_ERROR;
+//            result = (status_t)UNKNOWN_ERROR;
 //            goto bail;
 //        }
 //
@@ -473,7 +473,7 @@ using namespace android;
 //        }
 //    } else {
 //        assert(false);
-//        result = UNKNOWN_ERROR;
+//        result = (status_t)UNKNOWN_ERROR;
 //        goto bail;
 //    }
 //
@@ -502,7 +502,7 @@ using namespace android;
 //     * Go back and write the LFH.
 //     */
 //    if (fseek(mZipFp, lfhPosn, SEEK_SET) != 0) {
-//        result = UNKNOWN_ERROR;
+//        result = (status_t)UNKNOWN_ERROR;
 //        goto bail;
 //    }
 //    pEntry->mLFH.write(mZipFp);
@@ -544,7 +544,7 @@ using namespace android;
 //    assert(mEntries.size() == mEOCD.mTotalNumEntries);
 //
 //    if (fseek(mZipFp, mEOCD.mCentralDirOffset, SEEK_SET) != 0) {
-//        result = UNKNOWN_ERROR;
+//        result = (status_t)UNKNOWN_ERROR;
 //        goto bail;
 //    }
 //
@@ -584,7 +584,7 @@ using namespace android;
 //     */
 //    if (fseek(pSourceZip->mZipFp, pSourceEntry->getFileOffset(), SEEK_SET) != 0)
 //    {
-//        result = UNKNOWN_ERROR;
+//        result = (status_t)UNKNOWN_ERROR;
 //        goto bail;
 //    }
 //
@@ -597,7 +597,7 @@ using namespace android;
 //        != NO_ERROR)
 //    {
 //        ALOGW("copy of '%s' failed\n", pEntry->mCDE.mFileName);
-//        result = UNKNOWN_ERROR;
+//        result = (status_t)UNKNOWN_ERROR;
 //        goto bail;
 //    }
 //
@@ -654,7 +654,7 @@ using namespace android;
 //
 //        if (fwrite(tmpBuf, 1, count, dstFp) != count) {
 //            ALOGD("fwrite %d bytes failed\n", (int) count);
-//            return UNKNOWN_ERROR;
+//            return (status_t)UNKNOWN_ERROR;
 //        }
 //    }
 //
@@ -676,7 +676,7 @@ using namespace android;
 //        *pCRC32 = crc32(*pCRC32, (const unsigned char*)data, size);
 //        if (fwrite(data, 1, size, dstFp) != size) {
 //            ALOGD("fwrite %d bytes failed\n", (int) size);
-//            return UNKNOWN_ERROR;
+//            return (status_t)UNKNOWN_ERROR;
 //        }
 //    }
 //
@@ -710,7 +710,7 @@ using namespace android;
 //        count = fread(tmpBuf, 1, readSize, srcFp);
 //        if ((long) count != readSize) {     // error or unexpected EOF
 //            ALOGD("fread %d bytes failed\n", (int) readSize);
-//            return UNKNOWN_ERROR;
+//            return (status_t)UNKNOWN_ERROR;
 //        }
 //
 //        if (pCRC32 != NULL)
@@ -718,7 +718,7 @@ using namespace android;
 //
 //        if (fwrite(tmpBuf, 1, count, dstFp) != count) {
 //            ALOGD("fwrite %d bytes failed\n", (int) count);
-//            return UNKNOWN_ERROR;
+//            return (status_t)UNKNOWN_ERROR;
 //        }
 //
 //        length -= readSize;
@@ -771,7 +771,7 @@ using namespace android;
 //    zerr = deflateInit2(&zstream, Z_BEST_COMPRESSION,
 //        Z_DEFLATED, -MAX_WBITS, DEF_MEM_LEVEL, Z_DEFAULT_STRATEGY);
 //    if (zerr != Z_OK) {
-//        result = UNKNOWN_ERROR;
+//        result = (status_t)UNKNOWN_ERROR;
 //        if (zerr == Z_VERSION_ERROR) {
 //            ALOGE("Installed zlib is not compatible with linked version (%s)\n",
 //                ZLIB_VERSION);
@@ -825,7 +825,7 @@ using namespace android;
 //        zerr = deflate(&zstream, flush);
 //        if (zerr != Z_OK && zerr != Z_STREAM_END) {
 //            ALOGD("zlib deflate call failed (zerr=%d)\n", zerr);
-//            result = UNKNOWN_ERROR;
+//            result = (status_t)UNKNOWN_ERROR;
 //            goto z_bail;
 //        }
 //
@@ -905,7 +905,7 @@ using namespace android;
 //        return result;
 //
 //    if (fseek(mZipFp, mEOCD.mCentralDirOffset, SEEK_SET) != 0)
-//        return UNKNOWN_ERROR;
+//        return (status_t)UNKNOWN_ERROR;
 //
 //    count = mEntries.size();
 //    for (i = 0; i < count; i++) {
@@ -1055,24 +1055,24 @@ using namespace android;
 //
 //            if (fseek(fp, (long) src, SEEK_SET) != 0) {
 //                ALOGD("filemove src seek %ld failed\n", (long) src);
-//                return UNKNOWN_ERROR;
+//                return (status_t)UNKNOWN_ERROR;
 //            }
 //
 //            if (fread(readBuf, 1, getSize, fp) != getSize) {
 //                ALOGD("filemove read %ld off=%ld failed\n",
 //                    (long) getSize, (long) src);
-//                return UNKNOWN_ERROR;
+//                return (status_t)UNKNOWN_ERROR;
 //            }
 //
 //            if (fseek(fp, (long) dst, SEEK_SET) != 0) {
 //                ALOGD("filemove dst seek %ld failed\n", (long) dst);
-//                return UNKNOWN_ERROR;
+//                return (status_t)UNKNOWN_ERROR;
 //            }
 //
 //            if (fwrite(readBuf, 1, getSize, fp) != getSize) {
 //                ALOGD("filemove write %ld off=%ld failed\n",
 //                    (long) getSize, (long) dst);
-//                return UNKNOWN_ERROR;
+//                return (status_t)UNKNOWN_ERROR;
 //            }
 //
 //            src += getSize;
@@ -1082,7 +1082,7 @@ using namespace android;
 //    } else {
 //        /* shift stuff toward end of file; must read from end */
 //        assert(false);      // write this someday, maybe
-//        return UNKNOWN_ERROR;
+//        return (status_t)UNKNOWN_ERROR;
 //    }
 //
 //    return NO_ERROR;
@@ -1224,7 +1224,7 @@ status_t EndOfCentralDir::readBuf(const unsigned char* buf, int len)
 
     /* this should probably be an assert() */
     if (ZipEntry::getLongLE(&buf[0x00]) != kSignature)
-        return UNKNOWN_ERROR;
+        return (status_t)UNKNOWN_ERROR;
 
     mDiskNumber = ZipEntry::getShortLE(&buf[0x04]);
     mDiskWithCentralDir = ZipEntry::getShortLE(&buf[0x06]);
@@ -1240,7 +1240,7 @@ status_t EndOfCentralDir::readBuf(const unsigned char* buf, int len)
         if (kEOCDLen + mCommentLen > len) {
             ALOGD("EOCD(%d) + comment(%d) exceeds len (%d)\n",
                 kEOCDLen, mCommentLen, len);
-            return UNKNOWN_ERROR;
+            return (status_t)UNKNOWN_ERROR;
         }
         mComment = new unsigned char[mCommentLen];
         memcpy(mComment, buf + kEOCDLen, mCommentLen);
@@ -1266,11 +1266,11 @@ status_t EndOfCentralDir::write(FILE* fp)
     ZipEntry::putShortLE(&buf[0x14], mCommentLen);
 
     if (fwrite(buf, 1, kEOCDLen, fp) != kEOCDLen)
-        return UNKNOWN_ERROR;
+        return (status_t)UNKNOWN_ERROR;
     if (mCommentLen > 0) {
         assert(mComment != NULL);
         if (fwrite(mComment, mCommentLen, 1, fp) != mCommentLen)
-            return UNKNOWN_ERROR;
+            return (status_t)UNKNOWN_ERROR;
     }
 
     return NO_ERROR;
