@@ -683,7 +683,6 @@ typedef int (*OpenType)(const char *path, int flags, ...);
 static OpenType old_open = NULL;
 static int my_open(const char *path, int flags, ...)
 {	
-	MY_METHOD("open: %s", path);
 	if (old_open == NULL)
 	{
 		MY_ERROR("open is NULL");
@@ -692,7 +691,7 @@ static int my_open(const char *path, int flags, ...)
 		
 	check_set_old_function_to_shadow_zip();
 	
-	mode_t mode = 0;
+	mode_t mode = -1;
 	int has_mode = ((flags & O_CREAT) == O_CREAT) || ((flags & 020000000) == 020000000);
 	if (has_mode)
 	{
@@ -705,7 +704,9 @@ static int my_open(const char *path, int flags, ...)
 	struct stat file_stat;
 	memset(&file_stat, 0, sizeof(struct stat));
 	if (old_stat(path, &file_stat) != 0) {
-		return has_mode ? old_open(path, flags, mode) : old_open(path, flags);
+		int ret = has_mode ? old_open(path, flags, mode) : old_open(path, flags);
+		MY_METHOD("open: %s -> fd:0x%08x", path, ret);
+		return ret;
 	}
 	
 	if (g_apk_device_id == file_stat.st_dev && g_apk_ino == file_stat.st_ino)
@@ -715,25 +716,29 @@ static int my_open(const char *path, int flags, ...)
 		if (fp == NULL){	
 			MY_ERROR("something bad happens!");
 			delete shadow_zip;
-			return has_mode ? old_open(path, flags, mode) : old_open(path, flags); 
+			int ret = has_mode ? old_open(path, flags, mode) : old_open(path, flags);
+			MY_METHOD("open: %s -> fd:0x%08x", path, ret);
+			return ret;
 		}	
 		int fd = fileno(fp);
 		
-		MY_LOG("shadow apk: %s, fd:0x%08zx,", path, fd);
+		MY_LOG("shadow apk: %s, fd:0x%08x,", path, fd);
 		PthreadWriteGuard(&g_global_data->g_file_to_shadowzip_mutex);
 		g_global_data->g_fd_to_file[fd] = fp;
 		g_global_data->g_file_to_shadowzip[fp] = shadow_zip;
 		return fd;
 	}
 	
-	return has_mode ? old_open(path, flags, mode) : old_open(path, flags);
+	int ret = has_mode ? old_open(path, flags, mode) : old_open(path, flags);
+	MY_METHOD("open: %s -> fd:0x%08x", path, ret);
+	return ret;
 }
 
 typedef ssize_t(*ReadType)(int fd, void *buf, size_t nbyte);
 static ReadType old_read = NULL;
 static ssize_t my_read(int fd, void *buf, size_t nbyte)
 {
-	MY_METHOD("read: 0x%08zx, %d", fd, nbyte);
+	MY_METHOD("read: 0x%08x, %zu", fd, nbyte);
 	
 	check_set_old_function_to_shadow_zip();
 	
@@ -744,7 +749,7 @@ static ssize_t my_read(int fd, void *buf, size_t nbyte)
 	}else{
 		ret = shadow_zip->fread(buf, 1, nbyte, (FILE*)(size_t)fd);
 	}
-	MY_METHOD("readed: 0x%08zx, %d", fd, ret);
+	MY_METHOD("readed: 0x%08x, %zd", fd, ret);
 	return ret;
 }
 
@@ -764,7 +769,7 @@ off_t my_lseek(int fd, off_t offset, int whence)
 		ret = shadow_zip->fseek((FILE*)(size_t)fd, offset, whence);
 		if (ret == 0){ret = shadow_zip->ftell((FILE*)(size_t)fd);}
 	}
-	MY_METHOD("lseek: 0x%08zx, return: %ld", fd, ret);
+	MY_METHOD("lseek: 0x%08x, return: %ld", fd, ret);
 	return ret;
 }
 
@@ -772,7 +777,7 @@ typedef off64_t (*Lseek64Type)(int fd, off64_t offset, int whence);
 static Lseek64Type old_lseek64 = NULL;
 off64_t my_lseek64(int fd, off64_t offset, int whence)
 {
-	MY_METHOD("lseek64: 0x%08zx, offset: 0x%08llx, whence: %d", fd, offset, whence);
+	MY_METHOD("lseek64: 0x%08x, offset: 0x%08llx, whence: %d", fd, (unsigned long long)offset, whence);
 	
 	check_set_old_function_to_shadow_zip();
 	
@@ -784,7 +789,7 @@ off64_t my_lseek64(int fd, off64_t offset, int whence)
 		ret =  shadow_zip->fseek((FILE*)(size_t)fd, offset, whence);
 		if (ret == 0){ret = shadow_zip->ftell((FILE*)(size_t)fd);}
 	}
-	MY_METHOD("lseek64: 0x%08zx, return: %lld", fd, ret);
+	MY_METHOD("lseek64: 0x%08x, return: %lld", fd, (unsigned long long)ret);
 	return ret;
 }
 
@@ -792,7 +797,7 @@ typedef int (*CloseType)(int fd);
 static CloseType old_close = NULL;
 static int my_close(int fd)
 {
-	MY_METHOD("my_close: 0x%08zx", fd);
+	MY_METHOD("my_close: 0x%08x", fd);
 	
 	check_set_old_function_to_shadow_zip();
 	

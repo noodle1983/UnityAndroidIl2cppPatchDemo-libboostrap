@@ -243,7 +243,7 @@ void ShadowZip::output_apk(const char* _patch_dir)
             break;
         }
     }
-    MY_LOG("copy end at %ld, %llu", old_ftell(fw), g_shadowzip_global_data->end_of_file_);
+    MY_LOG("copy end at %ld, %llu", old_ftell(fw), (unsigned long long)g_shadowzip_global_data->end_of_file_);
     test.fclose(fr);
     old_fclose(fw);
 }
@@ -368,8 +368,12 @@ int ShadowZip::init(const char* _patch_dir, const char* _sys_apk_file)
     for(int i = 0; i < g_shadowzip_global_data->patch_partitions_.size(); i++)
     {
         FilePartitionInfo& partition = g_shadowzip_global_data->patch_partitions_[i]; 
-        MY_LOG("0x%08llx - 0x%08llx file:%d, [0x%08llx - 0x%08llx] ", partition.shadow_start_, partition.shadow_stop_, 
-                partition.file_index_, partition.start_in_file_, partition.stop_in_file_);
+        MY_LOG("0x%08llx - 0x%08llx file:%d, [0x%08llx - 0x%08llx] ", 
+			(unsigned long long)partition.shadow_start_, 
+			(unsigned long long)partition.shadow_stop_, 
+			partition.file_index_, 
+			(unsigned long long)partition.start_in_file_, 
+			(unsigned long long)partition.stop_in_file_);
     }
     clean_file_entries_map(entries_in_zip_file);
 	
@@ -378,7 +382,7 @@ int ShadowZip::init(const char* _patch_dir, const char* _sys_apk_file)
 
 uint64_t ShadowZip::get_eof_pos()
 {
-	MY_METHOD("get_eof_pos -> 0x%08llx", g_shadowzip_global_data->end_of_file_);
+	MY_METHOD("get_eof_pos -> 0x%08llx", (unsigned long long)g_shadowzip_global_data->end_of_file_);
 	return g_shadowzip_global_data->end_of_file_;
 }
 
@@ -391,13 +395,13 @@ FILE* ShadowZip::fopen()
 		fp_array_.push_back(NULL);
 	}
     FILE* fp = prepare_file(0);
-	MY_METHOD("fopen -> 0x%08x", (size_t)fp);
+	MY_METHOD("fopen -> 0x%08zx", (size_t)fp);
 	return fp;
 }
 
 off64_t ShadowZip::fseek(FILE *stream, off64_t offset, int whence)
 {	
-	MY_METHOD("fseek -> 0x%08x at 0x%08llx with type %d", (size_t)stream, offset, whence);
+	MY_METHOD("fseek -> 0x%08zx at 0x%08llx with type %d", (size_t)stream, (unsigned long long)offset, whence);
     int64_t cur_pos = pos_;
     if (whence == SEEK_SET){
         pos_ = offset;
@@ -417,7 +421,7 @@ off64_t ShadowZip::fseek(FILE *stream, off64_t offset, int whence)
 
 long ShadowZip::ftell(FILE *stream)
 {
-	MY_METHOD("ftell -> 0x%08x at 0x%08llx", (size_t)stream, pos_);
+	MY_METHOD("ftell -> 0x%08zx at 0x%08llx", (size_t)stream, (unsigned long long)pos_);
     return (long) pos_;
 }
 
@@ -428,7 +432,7 @@ void ShadowZip::rewind(FILE *stream)
 
 size_t ShadowZip::fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
-	MY_METHOD("fread -> 0x%08x at 0x%08llx, size:%d, n:%d", (size_t)stream, pos_, size, nmemb);
+	MY_METHOD("fread -> 0x%08zx at 0x%08llx, size:%zu, n:%zu", (size_t)stream, (unsigned long long)pos_, size, nmemb);
 	if (((int)nmemb) <= 0){return 0;}
 	
     uint64_t begin = pos_;
@@ -448,8 +452,8 @@ size_t ShadowZip::fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
         uint64_t stop_in_file = (end >= info.shadow_stop_) ? info.stop_in_file_ : (end - info.shadow_start_ + info.start_in_file_);
         int64_t read_size = stop_in_file - start_in_file;
         if (read_size > nmemb){
-            MY_LOG("p:%d, start:[%x,%x) read size:%d", i, (size_t)start_in_file, (size_t)stop_in_file,  (size_t)read_size);
-            MY_LOG("shadow:[%x,%x) pos:%x", (size_t)begin, (size_t)end, (size_t)pos_);
+            MY_LOG("p:%d, start:[%zx,%zx) read size:%zu", i, (size_t)start_in_file, (size_t)stop_in_file,  (size_t)read_size);
+            MY_LOG("shadow:[%zx,%zx) pos:%zx", (size_t)begin, (size_t)end, (size_t)pos_);
         }
         FILE* fp = prepare_file(info.file_index_);
         assert(fp != NULL);
@@ -467,7 +471,7 @@ size_t ShadowZip::fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
 
 char* ShadowZip::fgets(char *s, int size, FILE *stream)
 {
-	MY_METHOD("fgets -> 0x%08x at 0x%08llx, size:%d", (size_t)stream, pos_, size);
+	MY_METHOD("fgets -> 0x%08zx at 0x%08llx, size:%d", (size_t)stream, (unsigned long long)pos_, size);
     uint64_t begin = pos_;
     uint64_t end = pos_ + size;
 
@@ -484,8 +488,8 @@ char* ShadowZip::fgets(char *s, int size, FILE *stream)
         uint64_t stop_in_file = (end >= info.shadow_stop_) ? info.stop_in_file_ : (end - info.shadow_start_ + info.start_in_file_);
         int64_t read_size = stop_in_file - start_in_file;
         if (read_size > size){
-            MY_LOG("p:%d, start:[%x,%x) read size:%d", i, (size_t)start_in_file, (size_t)stop_in_file,  (size_t)read_size);
-            MY_LOG("shadow:[%x,%x) pos:%x", (size_t)begin, (size_t)end, (size_t)pos_);
+            MY_LOG("p:%d, start:[%zx,%zx) read size:%zu", i, (size_t)start_in_file, (size_t)stop_in_file,  (size_t)read_size);
+            MY_LOG("shadow:[%zx,%zx) pos:%zx", (size_t)begin, (size_t)end, (size_t)pos_);
         }
         FILE* fp = prepare_file(info.file_index_);
         assert(fp != NULL);
@@ -503,12 +507,12 @@ char* ShadowZip::fgets(char *s, int size, FILE *stream)
 
 int ShadowZip::fclose(FILE* stream)
 {
-	MY_METHOD("fclose -> 0x%08x at 0x%08llx", (size_t)stream, pos_);
+	MY_METHOD("fclose -> 0x%08zx at 0x%08llx", (size_t)stream, (unsigned long long)pos_);
     for(int i = 0; i < fp_array_.size(); i++) 
     {
 		FILE* fp = fp_array_[i];
 		if (fp) {		
-			MY_METHOD("fclose -> 0x%08x fp%d at 0x%08lx", (size_t)stream, i, old_ftell(fp));
+			MY_METHOD("fclose -> 0x%08zx fp%d at 0x%08lx", (size_t)stream, i, old_ftell(fp));
 			old_fclose(fp);
 		}
     }
@@ -527,7 +531,7 @@ FILE* ShadowZip::prepare_file(int _file_index)
     {
 		FILE* fp = fp_array_[i];
 		if (fp) {		
-			MY_METHOD("fclose -> 0x%08x fp%d at 0x%08lx", (size_t)stream, i, old_ftell(fp));
+			MY_METHOD("fclose -> 0x%08zx fp:%d at 0x%08lx", (size_t)fp, i, old_ftell(fp));
 			old_fclose(fp);
 			fp_array_[i] = NULL;
 		}
@@ -539,7 +543,7 @@ FILE* ShadowZip::prepare_file(int _file_index)
         MY_LOG("can't open file:%s", path.c_str());
         return NULL; 
     }
-	MY_METHOD("prepare_file %s -> 0x%08x", path.c_str(), (size_t)fp);
+	MY_METHOD("prepare_file %s -> 0x%08zx", path.c_str(), (size_t)fp);
     fp_array_[_file_index] = fp;
     return fp;
 }

@@ -56,7 +56,7 @@ status_t ZipEntry::initFromCDE(FILE* fp)
     if (fseek(fp, mCDE.mLocalHeaderRelOffset, SEEK_SET) != 0) {
         ALOGD("local header seek failed (%ld)\n",
             mCDE.mLocalHeaderRelOffset);
-        return UNKNOWN_ERROR;
+        return (status_t)UNKNOWN_ERROR;
     }
 
     result = mLFH.read(fp);
@@ -66,7 +66,7 @@ status_t ZipEntry::initFromCDE(FILE* fp)
     }
 
     if (fseek(fp, posn, SEEK_SET) != 0)
-        return UNKNOWN_ERROR;
+        return (status_t)UNKNOWN_ERROR;
 
     //mLFH.dump();
 
@@ -420,13 +420,13 @@ status_t ZipEntry::LocalFileHeader::read(FILE* fp)
     assert(mExtraField == NULL);
 
     if (fread(buf, 1, kLFHLen, fp) != kLFHLen) {
-        result = UNKNOWN_ERROR;
+        result = (status_t)UNKNOWN_ERROR;
         goto bail;
     }
 
     if (ZipEntry::getLongLE(&buf[0x00]) != kSignature) {
         ALOGD("whoops: didn't find expected signature\n");
-        result = UNKNOWN_ERROR;
+        result = (status_t)UNKNOWN_ERROR;
         goto bail;
     }
 
@@ -451,7 +451,7 @@ status_t ZipEntry::LocalFileHeader::read(FILE* fp)
             goto bail;
         }
         if (fread(mFileName, 1, mFileNameLength, fp) != mFileNameLength) {
-            result = UNKNOWN_ERROR;
+            result = (status_t)UNKNOWN_ERROR;
             goto bail;
         }
         mFileName[mFileNameLength] = '\0';
@@ -465,7 +465,7 @@ status_t ZipEntry::LocalFileHeader::read(FILE* fp)
             goto bail;
         }
         if (fread(mExtraField, 1, mExtraFieldLength, fp) != mExtraFieldLength) {
-            result = UNKNOWN_ERROR;
+            result = (status_t)UNKNOWN_ERROR;
             goto bail;
         }
         mExtraField[mExtraFieldLength] = '\0';
@@ -495,18 +495,18 @@ status_t ZipEntry::LocalFileHeader::write(FILE* fp)
     ZipEntry::putShortLE(&buf[0x1c], mExtraFieldLength);
 
     if (fwrite(buf, 1, kLFHLen, fp) != kLFHLen)
-        return UNKNOWN_ERROR;
+        return (status_t)UNKNOWN_ERROR;
 
     /* write filename */
     if (mFileNameLength != 0) {
         if (fwrite(mFileName, 1, mFileNameLength, fp) != mFileNameLength)
-            return UNKNOWN_ERROR;
+            return (status_t)UNKNOWN_ERROR;
     }
 
     /* write "extra field" */
     if (mExtraFieldLength != 0) {
         if (fwrite(mExtraField, 1, mExtraFieldLength, fp) != mExtraFieldLength)
-            return UNKNOWN_ERROR;
+            return (status_t)UNKNOWN_ERROR;
     }
 
     return NO_ERROR;
@@ -556,13 +556,13 @@ status_t ZipEntry::CentralDirEntry::read(FILE* fp)
     assert(mFileComment == NULL);
 
     if (fread(buf, 1, kCDELen, fp) != kCDELen) {
-        result = UNKNOWN_ERROR;
+        result = (status_t)UNKNOWN_ERROR;
         goto bail;
     }
 
     if (ZipEntry::getLongLE(&buf[0x00]) != kSignature) {
         ALOGD("Whoops: didn't find expected signature\n");
-        result = UNKNOWN_ERROR;
+        result = (status_t)UNKNOWN_ERROR;
         goto bail;
     }
 
@@ -593,7 +593,7 @@ status_t ZipEntry::CentralDirEntry::read(FILE* fp)
             goto bail;
         }
         if (fread(mFileName, 1, mFileNameLength, fp) != mFileNameLength) {
-            result = UNKNOWN_ERROR;
+            result = (status_t)UNKNOWN_ERROR;
             goto bail;
         }
         mFileName[mFileNameLength] = '\0';
@@ -607,7 +607,7 @@ status_t ZipEntry::CentralDirEntry::read(FILE* fp)
             goto bail;
         }
         if (fread(mExtraField, 1, mExtraFieldLength, fp) != mExtraFieldLength) {
-            result = UNKNOWN_ERROR;
+            result = (status_t)UNKNOWN_ERROR;
             goto bail;
         }
         mExtraField[mExtraFieldLength] = '\0';
@@ -623,7 +623,7 @@ status_t ZipEntry::CentralDirEntry::read(FILE* fp)
         }
         if (fread(mFileComment, 1, mFileCommentLength, fp) != mFileCommentLength)
         {
-            result = UNKNOWN_ERROR;
+            result = (status_t)UNKNOWN_ERROR;
             goto bail;
         }
         mFileComment[mFileCommentLength] = '\0';
@@ -659,24 +659,24 @@ status_t ZipEntry::CentralDirEntry::write(FILE* fp)
     ZipEntry::putLongLE(&buf[0x2a], mLocalHeaderRelOffset);
 
     if (fwrite(buf, 1, kCDELen, fp) != kCDELen)
-        return UNKNOWN_ERROR;
+        return (status_t)UNKNOWN_ERROR;
 
     /* write filename */
     if (mFileNameLength != 0) {
         if (fwrite(mFileName, 1, mFileNameLength, fp) != mFileNameLength)
-            return UNKNOWN_ERROR;
+            return (status_t)UNKNOWN_ERROR;
     }
 
     /* write "extra field" */
     if (mExtraFieldLength != 0) {
         if (fwrite(mExtraField, 1, mExtraFieldLength, fp) != mExtraFieldLength)
-            return UNKNOWN_ERROR;
+            return (status_t)UNKNOWN_ERROR;
     }
 
     /* write comment */
     if (mFileCommentLength != 0) {
         if (fwrite(mFileComment, 1, mFileCommentLength, fp) != mFileCommentLength)
-            return UNKNOWN_ERROR;
+            return (status_t)UNKNOWN_ERROR;
     }
 
     return NO_ERROR;
@@ -718,13 +718,13 @@ status_t ZipEntry::DataDescriptor::read(FILE* fp)
     unsigned char buf[kDDLen];
 
     if (fread(buf, 1, kDDLen, fp) != kDDLen) {
-        result = UNKNOWN_ERROR;
+        result = (status_t)UNKNOWN_ERROR;
         goto bail;
     }
 
     if (ZipEntry::getLongLE(&buf[0x00]) != kSignature) {
         ALOGD("Whoops: didn't find expected signature\n");
-        result = UNKNOWN_ERROR;
+        result = (status_t)UNKNOWN_ERROR;
         goto bail;
     }
 
