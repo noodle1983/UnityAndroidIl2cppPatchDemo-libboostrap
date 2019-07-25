@@ -18,20 +18,6 @@ struct GlobalData
 };
 #define g_global_data (LeakSingleton<GlobalData, 0>::instance())
 
-const char* data_file_path = NULL;
-static void bootstrap();
-
-__attribute__ ((visibility ("default")))
-JNIEXPORT void JNICALL Java_io_github_noodle1983_Boostrap_init
-  (JNIEnv * jenv, jclass cls, jstring path)
-{
-	data_file_path = jenv->GetStringUTFChars(path, NULL);
-	MY_INFO("data file path:%s", data_file_path);
-	
-	LeakSingleton<GlobalData, 0>::init();
-    bootstrap();
-}
-
 
 static inline char * dupstr(const char* const str)
 {
@@ -42,6 +28,22 @@ static inline char * dupstr(const char* const str)
 	memset(ret, 0, len);
 	strncpy(ret, str, len);
 	return ret;
+}
+
+const char* g_data_file_path = NULL;
+static void bootstrap();
+
+__attribute__ ((visibility ("default")))
+JNIEXPORT void JNICALL Java_io_github_noodle1983_Boostrap_init
+  (JNIEnv * jenv, jclass cls, jstring path)
+{
+	const char* data_file_path = jenv->GetStringUTFChars(path, NULL); 
+	g_data_file_path = dupstr(data_file_path); // never delete, ok with only one
+	jenv->ReleaseStringUTFChars(path, data_file_path);
+	MY_INFO("data file path:%s", g_data_file_path);
+	
+	LeakSingleton<GlobalData, 0>::init();
+    bootstrap();
 }
 
 static std::string get_bundle_id()
@@ -86,7 +88,7 @@ char* use_data_dir(const char* data_path)
 	
 	std::string bundle_id = get_bundle_id();
 	char patch_info_path[256] = {0};
-	snprintf(patch_info_path, sizeof(patch_info_path), "%s/user.db",  data_file_path);
+	snprintf(patch_info_path, sizeof(patch_info_path), "%s/user.db",  g_data_file_path);
 	
 	std::fstream patch_info_file(patch_info_path, std::fstream::out|std::fstream::trunc);
 	if (!patch_info_file.is_open())
@@ -104,7 +106,7 @@ char* use_data_dir(const char* data_path)
 static bool pre_process_so_lib(const char* const so_path, const char* const so_name, const std::string& bundle_id)
 {
 	char link_file[256] = {0};
-	snprintf(link_file, sizeof(link_file), "%s/%s", data_file_path, so_name);
+	snprintf(link_file, sizeof(link_file), "%s/%s", g_data_file_path, so_name);
 	
 	MY_LOG("link %s to %s", so_path, link_file);
 	
@@ -205,12 +207,12 @@ static ino_t g_apk_ino = -1;
 static bool extract_patch_info(const std::string& apk_path, const std::string& bundle_id, std::string& default_path, std::string& patch_path)
 {
 	char default_il2cpp_path[256] = {0};
-	snprintf(default_il2cpp_path, sizeof(default_il2cpp_path), "%s/../lib/libil2cpp.so",  data_file_path);
+	snprintf(default_il2cpp_path, sizeof(default_il2cpp_path), "%s/../lib/libil2cpp.so",  g_data_file_path);
 	default_path = std::string(default_il2cpp_path);
 	patch_path.clear();
 	
 	char patch_info_path[256] = {0};
-	snprintf(patch_info_path, sizeof(patch_info_path), "%s/user.db",  data_file_path);
+	snprintf(patch_info_path, sizeof(patch_info_path), "%s/user.db",  g_data_file_path);
 	
 	struct stat apk_stat;
 	memset(&apk_stat, 0, sizeof(struct stat));
@@ -266,7 +268,7 @@ static bool extract_patch_info(const std::string& apk_path, const std::string& b
 	}
 	
 	char link_file[256] = {0};
-	snprintf(link_file, sizeof(link_file), "%s/libil2cpp.so", data_file_path);
+	snprintf(link_file, sizeof(link_file), "%s/libil2cpp.so", g_data_file_path);
 	std::string il2cpp_path(link_file);	
 	FILE *fp = fopen (il2cpp_path.c_str(), "r");
 	if (fp == NULL) 
@@ -688,7 +690,7 @@ static void *my_dlopen(const char *filename, int flags)
 	{		
 		std::string bundle_id = get_bundle_id();	
 		char link_file[256] = {0};
-		snprintf(link_file, sizeof(link_file), "%s/libil2cpp.so", data_file_path);
+		snprintf(link_file, sizeof(link_file), "%s/libil2cpp.so", g_data_file_path);
 		MY_LOG("redirect to %s", link_file);
 		return old_dlopen(link_file, flags);
 	}
@@ -946,7 +948,7 @@ static void *my_art_dlopen(const char *filename, int flags)
 	{		
 		std::string bundle_id = get_bundle_id();	
 		char link_file[256] = {0};
-		snprintf(link_file, sizeof(link_file), "%s/libil2cpp.so", data_file_path);
+		snprintf(link_file, sizeof(link_file), "%s/libil2cpp.so", g_data_file_path);
 		MY_LOG("art redirect to %s", link_file);
 		return art_old_dlopen(link_file, flags);
 	}
