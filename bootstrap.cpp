@@ -30,7 +30,9 @@ static inline char * dupstr(const char* const str)
 	return ret;
 }
 
+const char* SPLITER = ";";
 const char* g_data_file_path = NULL;
+const char* g_apk_file_path = NULL;
 static void bootstrap();
 
 __attribute__ ((visibility ("default")))
@@ -74,7 +76,7 @@ char* get_arch_abi()
 
 static char* g_use_data_path = NULL;
 __attribute__ ((visibility ("default")))
-char* use_data_dir(const char* data_path)
+char* use_data_dir(const char* data_path, const char* apk_path)
 {
 	if (strlen(data_path) > 0){
 		DIR* dir = opendir(data_path);
@@ -98,7 +100,9 @@ char* use_data_dir(const char* data_path)
 		MY_ERROR("can't access to %s. %s", patch_info_path, error_str);
 		return dupstr(error_str);
 	}
-	patch_info_file.write(data_path, strlen(data_path));
+	patch_info_file.write(data_path, strlen(data_path));	
+	patch_info_file.write(SPLITER, strlen(SPLITER));	
+	patch_info_file.write(apk_path, strlen(apk_path));	
 	patch_info_file.close();
 	return NULL;
 }
@@ -204,7 +208,7 @@ static bool pre_process_all_so_lib(const char* const data_path, const std::strin
 
 static dev_t g_apk_device_id = -1;
 static ino_t g_apk_ino = -1;
-static bool extract_patch_info(const std::string& apk_path, const std::string& bundle_id, std::string& default_path, std::string& patch_path)
+static bool extract_patch_info(const std::string& bundle_id, std::string& default_path, std::string& patch_path)
 {
 	char default_il2cpp_path[256] = {0};
 	snprintf(default_il2cpp_path, sizeof(default_il2cpp_path), "%s/../lib/libil2cpp.so",  g_data_file_path);
@@ -214,15 +218,7 @@ static bool extract_patch_info(const std::string& apk_path, const std::string& b
 	char patch_info_path[256] = {0};
 	snprintf(patch_info_path, sizeof(patch_info_path), "%s/user.db",  g_data_file_path);
 	
-	struct stat apk_stat;
-	memset(&apk_stat, 0, sizeof(struct stat));
-	if (stat(apk_path.c_str(), &apk_stat) != 0) {
-		MY_ERROR("can't read file:%d[%s]", errno, apk_path.c_str());
-		return false;
-	}
-	g_apk_device_id = apk_stat.st_dev;
-	g_apk_ino = apk_stat.st_ino;
-	
+	//get patch date
 	struct stat user_stat;
 	memset(&user_stat, 0, sizeof(struct stat));
 	if (stat(patch_info_path, &user_stat) != 0) {
@@ -230,19 +226,13 @@ static bool extract_patch_info(const std::string& apk_path, const std::string& b
 		return false;
 	}
 	
-	if (apk_stat.st_mtime > user_stat.st_mtime){	
-		MY_ERROR("newer apk file:%s, no need to patch", apk_path.c_str());
-		unlink(patch_info_path);
-		return false;
-	}
-	
+	//get patch config
 	std::fstream patch_info_file(patch_info_path, std::fstream::in);
 	if (!patch_info_file.is_open())
 	{	
 		if (g_use_data_path != NULL){delete[] g_use_data_path; g_use_data_path = NULL;}
 		return false;
-	}
-	
+	}	
 	char file_content[4096] = {0};
 	patch_info_file.getline(file_content, sizeof(file_content));
 	if (strlen(file_content) == 0)
@@ -252,6 +242,17 @@ static bool extract_patch_info(const std::string& apk_path, const std::string& b
 	}
 	patch_info_file.close();
 	
+	//split data_path and apk_path
+	char* split_pos = strstr( file_content, SPLITER );
+	if(split_pos == NULL)
+	{
+		MY_ERROR("spliter[%s] not found in line[%s]", SPLITER, file_content);
+		return false;
+	}	
+	int spliter_len = strlen(SPLITER);
+	memset(split_pos, 0, spliter_len);
+	const char* apk_path = split_pos + spliter_len;
+	
 	char* data_path = file_content;
 	DIR* dir = opendir(data_path);
 	if (dir == NULL)
@@ -260,6 +261,23 @@ static bool extract_patch_info(const std::string& apk_path, const std::string& b
 		return false;		
 	}
 	closedir(dir);
+	
+	//get and save apk file id
+	struct stat apk_stat;
+	memset(&apk_stat, 0, sizeof(struct stat));
+	if (stat(apk_path, &apk_stat) != 0) {
+		MY_ERROR("can't read file:%d[%s]", errno, apk_path);
+		return false;
+	}
+	g_apk_device_id = apk_stat.st_dev;
+	g_apk_ino = apk_stat.st_ino;
+		
+	//if we have newer apk file, then no need to load patch
+	if (apk_stat.st_mtime > user_stat.st_mtime){	
+		MY_ERROR("newer apk file:%s, no need to patch", apk_path);
+		unlink(patch_info_path);
+		return false;
+	}
 	
 	if (!pre_process_all_so_lib(data_path, bundle_id))
 	{
@@ -280,6 +298,8 @@ static bool extract_patch_info(const std::string& apk_path, const std::string& b
 	
 	if (g_use_data_path != NULL){delete[] g_use_data_path;}
 	g_use_data_path = dupstr(data_path);
+	if (g_apk_file_path != NULL){delete[] g_apk_file_path;}
+	g_apk_file_path = dupstr(apk_path);
 	patch_path = il2cpp_path;
 	return true;
 }
@@ -459,31 +479,31 @@ static void dump_maps( )
 	}
 }
 
-std::string get_apk_path(const std::string& bundle_id)
-{
-	FILE *fp;
-	char *found_path = NULL;
-	char filename[32];
-	char line[1024];
-	const char* TAIL = ".apk";
-	int TAIL_LEN = strlen(TAIL);
-	std::string ret;
-	
-	fp = fopen( "/proc/self/maps", "r" );
-	if ( fp != NULL ){
-		while ( fgets( line, sizeof(line), fp ) ){	
-			int line_len = strlen(line);
-			while(line[line_len - 1] == ' ' || line[line_len - 1] == '\r' || line[line_len - 1] == '\n' || line[line_len - 1] == '\t') {line[line_len - 1] = '\0'; line_len--;}
-			if ( strstr( line, bundle_id.c_str()) && (memcmp(line + strlen(line) - TAIL_LEN, TAIL, TAIL_LEN) == 0) ){
-				found_path = strchr( line, '/' );
-				ret = std::string(found_path);
-				break;
-			}
-		}
-		fclose( fp ) ;
-	}
-	return ret;
-}
+//std::string get_apk_path(const std::string& bundle_id)
+//{
+//	FILE *fp;
+//	char *found_path = NULL;
+//	char filename[32];
+//	char line[1024];
+//	const char* TAIL = ".apk";
+//	int TAIL_LEN = strlen(TAIL);
+//	std::string ret;
+//	
+//	fp = fopen( "/proc/self/maps", "r" );
+//	if ( fp != NULL ){
+//		while ( fgets( line, sizeof(line), fp ) ){	
+//			int line_len = strlen(line);
+//			while(line[line_len - 1] == ' ' || line[line_len - 1] == '\r' || line[line_len - 1] == '\n' || line[line_len - 1] == '\t') {line[line_len - 1] = '\0'; line_len--;}
+//			if ( strstr( line, bundle_id.c_str()) && (memcmp(line + strlen(line) - TAIL_LEN, TAIL, TAIL_LEN) == 0) ){
+//				found_path = strchr( line, '/' );
+//				ret = std::string(found_path);
+//				break;
+//			}
+//		}
+//		fclose( fp ) ;
+//	}
+//	return ret;
+//}
 
 static void check_set_old_function_to_shadow_zip();
 
@@ -1004,23 +1024,18 @@ static void bootstrap()
 		MY_ERROR("bundle id not matched:" BUNDLE_ID);
 		return;
 	}
-	std::string apk_path = get_apk_path(bundle_id);
-	if (!verify_bundle_id( bundle_id.c_str() )){		
-		MY_ERROR("bundle id not matched:" BUNDLE_ID);
-		return;
-	}
-	MY_INFO("bootstrap running %s with apk_path:%s", TARGET_ARCH_ABI, apk_path.c_str());	
 	
 	std::string default_il2cpp_path;
 	std::string patch_il2cpp_path;
-	bool use_patch = extract_patch_info(apk_path, bundle_id, default_il2cpp_path, patch_il2cpp_path);
+	bool use_patch = extract_patch_info(bundle_id, default_il2cpp_path, patch_il2cpp_path);
 	if (!verify_bundle_id( bundle_id.c_str() )){		
 		MY_ERROR("bootstrap running failed.");
 		return;
 	}
 	
 	if (use_patch){
-		bool success = (0 == ShadowZip::init(g_use_data_path, apk_path.c_str())) && (0 == init_hook(bundle_id)) && (0 == init_art_hook());
+		MY_INFO("bootstrap running %s with apk_path:%s", TARGET_ARCH_ABI, g_apk_file_path);	
+		bool success = (0 == ShadowZip::init(g_use_data_path, g_apk_file_path)) && (0 == init_hook(bundle_id)) && (0 == init_art_hook());
 		if (success)
 		{			
 			static void *handle = dlopen(patch_il2cpp_path.c_str(), RTLD_NOW);

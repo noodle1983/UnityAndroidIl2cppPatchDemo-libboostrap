@@ -56,7 +56,7 @@ typedef void* Il2CppSetFindPlugInCallback;
 extern "C" {
 	char* get_arch_abi();
 	char* get_data_dir();
-	char* use_data_dir(const char* data_path);
+	char* use_data_dir(const char* data_path, const char* apk_path);
 	
 	void il2cpp_init(const char *domain_name);
 	void il2cpp_init_utf16();
