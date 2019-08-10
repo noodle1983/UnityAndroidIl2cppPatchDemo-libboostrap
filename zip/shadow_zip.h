@@ -52,6 +52,7 @@ public:
 	static char* (*volatile old_fgets)(char *s, int size, FILE *stream);
     static int (*volatile old_fclose)(FILE* _fp);
 
+	static bool contains_path(const char* _apk_file, const char* _check_path);
 private:
     FILE* prepare_file(int _file_index);
 

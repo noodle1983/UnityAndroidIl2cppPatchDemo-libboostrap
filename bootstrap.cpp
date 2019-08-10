@@ -34,6 +34,7 @@ const char* SPLITER = ";";
 const char* g_data_file_path = NULL;
 const char* g_apk_file_path = NULL;
 static void bootstrap();
+std::string get_apk_path(const std::string& bundle_id);
 
 __attribute__ ((visibility ("default")))
 JNIEXPORT void JNICALL Java_io_github_noodle1983_Boostrap_init
@@ -242,16 +243,13 @@ static bool extract_patch_info(const std::string& bundle_id, std::string& defaul
 	}
 	patch_info_file.close();
 	
-	//split data_path and apk_path
+	//split data_path
 	char* split_pos = strstr( file_content, SPLITER );
-	if(split_pos == NULL)
+	if(split_pos != NULL)
 	{
-		MY_ERROR("spliter[%s] not found in line[%s]", SPLITER, file_content);
-		return false;
-	}	
-	int spliter_len = strlen(SPLITER);
-	memset(split_pos, 0, spliter_len);
-	const char* apk_path = split_pos + spliter_len;
+		int spliter_len = strlen(SPLITER);
+		memset(split_pos, 0, spliter_len);
+	}
 	
 	char* data_path = file_content;
 	DIR* dir = opendir(data_path);
@@ -263,6 +261,8 @@ static bool extract_patch_info(const std::string& bundle_id, std::string& defaul
 	closedir(dir);
 	
 	//get and save apk file id
+	std::string apk_path_string = get_apk_path(bundle_id);	
+	const char* apk_path = apk_path_string.c_str();
 	struct stat apk_stat;
 	memset(&apk_stat, 0, sizeof(struct stat));
 	if (stat(apk_path, &apk_stat) != 0) {
@@ -479,31 +479,34 @@ static void dump_maps( )
 	}
 }
 
-//std::string get_apk_path(const std::string& bundle_id)
-//{
-//	FILE *fp;
-//	char *found_path = NULL;
-//	char filename[32];
-//	char line[1024];
-//	const char* TAIL = ".apk";
-//	int TAIL_LEN = strlen(TAIL);
-//	std::string ret;
-//	
-//	fp = fopen( "/proc/self/maps", "r" );
-//	if ( fp != NULL ){
-//		while ( fgets( line, sizeof(line), fp ) ){	
-//			int line_len = strlen(line);
-//			while(line[line_len - 1] == ' ' || line[line_len - 1] == '\r' || line[line_len - 1] == '\n' || line[line_len - 1] == '\t') {line[line_len - 1] = '\0'; line_len--;}
-//			if ( strstr( line, bundle_id.c_str()) && (memcmp(line + strlen(line) - TAIL_LEN, TAIL, TAIL_LEN) == 0) ){
-//				found_path = strchr( line, '/' );
-//				ret = std::string(found_path);
-//				break;
-//			}
-//		}
-//		fclose( fp ) ;
-//	}
-//	return ret;
-//}
+std::string get_apk_path(const std::string& bundle_id)
+{
+	FILE *fp;
+	char *found_path = NULL;
+	char filename[32];
+	char line[1024];
+	const char* TAIL = ".apk";
+	int TAIL_LEN = strlen(TAIL);
+	std::string ret;
+	
+	fp = fopen( "/proc/self/maps", "r" );
+	if ( fp != NULL ){
+		while ( fgets( line, sizeof(line), fp ) ){	
+			int line_len = strlen(line);
+			while(line[line_len - 1] == ' ' || line[line_len - 1] == '\r' || line[line_len - 1] == '\n' || line[line_len - 1] == '\t') {line[line_len - 1] = '\0'; line_len--;}
+			if ( strstr( line, bundle_id.c_str()) && (memcmp(line + strlen(line) - TAIL_LEN, TAIL, TAIL_LEN) == 0) ){
+				found_path = strchr( line, '/' );
+				if (ShadowZip::contains_path(found_path, "assets/bin/Data/"))
+				{
+					ret = std::string(found_path);
+					break;
+				}
+			}
+		}
+		fclose( fp ) ;
+	}
+	return ret;
+}
 
 static void check_set_old_function_to_shadow_zip();
 

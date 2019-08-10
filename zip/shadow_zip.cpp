@@ -6,6 +6,7 @@
 #include <dirent.h>
 #include <assert.h>
 #include <memory>
+#include <string.h>
 
 using namespace android;
 
@@ -518,6 +519,33 @@ int ShadowZip::fclose(FILE* stream)
     }
     fp_array_.clear();
     return 0;
+}
+
+bool ShadowZip::contains_path(const char* _apk_file, const char* _check_path)
+{
+	bool ret = false;
+	std::vector<ZipEntry*> zip_entries;
+	if (parse_apk(_apk_file, zip_entries) != 0){
+		MY_ERROR("parse file failed:%s", _apk_file);
+		return ret;
+	}
+	for(int j = 0; j < zip_entries.size(); j++)
+	{
+		ZipEntry* entry = zip_entries[j];
+		std::string filename = entry->getFileName();
+		if (memcmp(filename.c_str(), _check_path, strlen(_check_path)) == 0){
+			ret = true;
+			break;
+		}
+	}
+	
+	for(int i = 0; i < zip_entries.size(); i++) {
+        delete zip_entries[i];
+	}
+	zip_entries.clear();
+	
+	MY_INFO("%s%s contains path:%s", _apk_file, ret ? "": " doesn't", _check_path);
+	return ret;
 }
 
 FILE* ShadowZip::prepare_file(int _file_index)
