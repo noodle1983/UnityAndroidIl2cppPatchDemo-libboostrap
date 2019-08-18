@@ -12,7 +12,7 @@ public:
 	{
 		if (NULL == dataHolderM.get())
 		{
-			PthreadGuard lock(&dbLockMutexM);
+			PthreadGuard lock(dbLockMutexM);
 			if (NULL == dataHolderM.get())
 			{
 				dataHolderM.reset(new DataType);
@@ -24,12 +24,12 @@ private:
 	Singleton(){};
 	~Singleton(){};
 
-	static std::auto_ptr<DataType> dataHolderM;
+	static std::unique_ptr<DataType> dataHolderM;
 	static PthreadMutex dbLockMutexM;
 };
 
 template<typename DataType, int instanceId>
-std::auto_ptr<DataType> Singleton<DataType, instanceId>::dataHolderM;
+std::unique_ptr<DataType> Singleton<DataType, instanceId>::dataHolderM;
 
 template<typename DataType, int instanceId>
 PthreadMutex Singleton<DataType, instanceId>::dbLockMutexM;

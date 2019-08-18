@@ -542,7 +542,7 @@ static int my_stat(const char *path, struct stat *file_stat)
 
 static ShadowZip* get_cached_shadowzip(FILE *stream)
 {
-	PthreadReadGuard(&g_global_data->g_file_to_shadowzip_mutex);
+	PthreadReadGuard(g_global_data->g_file_to_shadowzip_mutex);
 	std::map<FILE*, ShadowZip*>::iterator it = g_global_data->g_file_to_shadowzip.find(stream);
 	ShadowZip* shadow_zip = (it == g_global_data->g_file_to_shadowzip.end()) ? NULL : it->second;
 	return shadow_zip;
@@ -550,7 +550,7 @@ static ShadowZip* get_cached_shadowzip(FILE *stream)
 
 static ShadowZip* get_cached_shadowzip(int fd)
 {
-	PthreadReadGuard(&g_global_data->g_file_to_shadowzip_mutex);
+	PthreadReadGuard(g_global_data->g_file_to_shadowzip_mutex);
 	std::map<int, FILE*>::iterator it_fd = g_global_data->g_fd_to_file.find(fd);
 	FILE* stream = (it_fd == g_global_data->g_fd_to_file.end()) ? NULL : it_fd->second;
 	if (stream == NULL){return NULL;}
@@ -591,7 +591,7 @@ static FILE *my_fopen(const char *path, const char *mode)
 		}	
 		
 		MY_LOG("shadow apk: %s", path);
-		PthreadWriteGuard(&g_global_data->g_file_to_shadowzip_mutex);
+		PthreadWriteGuard(g_global_data->g_file_to_shadowzip_mutex);
 		g_global_data->g_file_to_shadowzip[fp] = shadow_zip;
 		return fp;
 	}
@@ -685,7 +685,7 @@ static int my_fclose(FILE* stream)
 	
 	ShadowZip* shadow_zip = NULL;
 	{
-		PthreadWriteGuard(&g_global_data->g_file_to_shadowzip_mutex);
+		PthreadWriteGuard(g_global_data->g_file_to_shadowzip_mutex);
 		std::map<FILE*, ShadowZip*>::iterator it = g_global_data->g_file_to_shadowzip.find(stream);
 		shadow_zip = (it == g_global_data->g_file_to_shadowzip.end()) ? NULL : it->second;
 		if (it != g_global_data->g_file_to_shadowzip.end()){
@@ -764,7 +764,7 @@ static int my_open(const char *path, int flags, ...)
 		int fd = fileno(fp);
 		
 		MY_LOG("shadow apk: %s, fd:0x%08x,", path, fd);
-		PthreadWriteGuard(&g_global_data->g_file_to_shadowzip_mutex);
+		PthreadWriteGuard(g_global_data->g_file_to_shadowzip_mutex);
 		g_global_data->g_fd_to_file[fd] = fp;
 		g_global_data->g_file_to_shadowzip[fp] = shadow_zip;
 		return fd;
@@ -844,7 +844,7 @@ static int my_close(int fd)
 	
 	ShadowZip* shadow_zip = NULL;
 	{
-		PthreadWriteGuard(&g_global_data->g_file_to_shadowzip_mutex);
+		PthreadWriteGuard(g_global_data->g_file_to_shadowzip_mutex);
 		std::map<int, FILE*>::iterator it_fd = g_global_data->g_fd_to_file.find(fd);
 		FILE* stream = (it_fd == g_global_data->g_fd_to_file.end()) ? NULL : it_fd->second;		
 		if (stream == NULL){return old_close(fd);}
