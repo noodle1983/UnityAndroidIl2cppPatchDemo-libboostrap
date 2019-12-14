@@ -25,10 +25,10 @@ public:
 
     void Lock(){
 		pthread_mutex_lock(&mutexlock);
-		MY_METHOD("lock at mutex: 0x%08llx", (unsigned long long)&mutexlock);
+		//MY_METHOD("lock at mutex: 0x%08llx", (unsigned long long)&mutexlock);
 	}
     void Unlock(){	
-		MY_METHOD("unlock at mutex: 0x%08llx", (unsigned long long)&mutexlock);
+		//MY_METHOD("unlock at mutex: 0x%08llx", (unsigned long long)&mutexlock);
 		pthread_mutex_unlock(&mutexlock);
 	}
 private:
