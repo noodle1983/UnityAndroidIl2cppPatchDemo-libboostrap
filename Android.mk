@@ -23,8 +23,8 @@ LOCAL_SRC_FILES := \
 	zip/ZipEntry.cpp \
 	zip/ZipFile.cpp
 
-LOCAL_CFLAGS := -Izip -DTARGET_ARCH_ABI=\"$(TARGET_ARCH_ABI)\"  -DBUNDLE_ID=\"cn.noodle1983.unitypatchdemo*\"  -std=c11 -fvisibility=hidden
-LOCAL_CPPFLAGS := -Izip -DTARGET_ARCH_ABI=\"$(TARGET_ARCH_ABI)\"  -DBUNDLE_ID=\"cn.noodle1983.unitypatchdemo*\"  -std=c++11 -fvisibility=hidden
+LOCAL_CFLAGS := -Izip -DTARGET_ARCH_ABI=\"$(TARGET_ARCH_ABI)\"  -std=c11 -fvisibility=hidden
+LOCAL_CPPFLAGS := -Izip -DTARGET_ARCH_ABI=\"$(TARGET_ARCH_ABI)\"  -std=c++11 -fvisibility=hidden
 
 LOCAL_LDLIBS := -llog -L$(LOCAL_PATH)/../../libs/$(TARGET_ARCH_ABI)
 

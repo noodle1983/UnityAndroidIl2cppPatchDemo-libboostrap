@@ -26,9 +26,7 @@ struct FilePartitionInfo
 class ShadowZip
 {
 public:
-    ShadowZip()
-    {
-	}
+    ShadowZip();
     virtual ~ShadowZip(){
         fclose(NULL);
     }
@@ -44,13 +42,6 @@ public:
     static int init(const char* _patch_dir, const char* _sys_apk_file);
 	static uint64_t get_eof_pos();
 	static void output_apk(const char* _patch_dir);
-    static FILE *(*volatile old_fopen)(const char *path, const char *mode);
-    static int (*volatile old_fseek)(FILE *stream, long offset, int whence);
-    static long (*volatile old_ftell)(FILE *stream);
-    //static void (*volatile old_rewind)(FILE *stream);
-    static size_t (*volatile old_fread)(void *ptr, size_t size, size_t nmemb, FILE *stream);
-	static char* (*volatile old_fgets)(char *s, int size, FILE *stream);
-    static int (*volatile old_fclose)(FILE* _fp);
 
 	static bool contains_path(const char* _apk_file, const char* _check_path);
 private:
@@ -59,6 +50,11 @@ private:
 private:
     int64_t pos_;
     std::vector<FILE *> fp_array_;
+	
+	//copy from global data
+    std::vector<FilePartitionInfo> patch_partitions_;
+    std::vector<std::string> all_files_;
+    uint64_t end_of_file_;
 };
 
 #endif /* SHADOW_ZIP_H */
