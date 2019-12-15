@@ -9,11 +9,12 @@
 #include "zip/shadow_zip.h"
 #include "xhook/xhook.h"
 #include "io_github_noodle1983_Boostrap.h"
+#include "mymap32.h"
 
 struct GlobalData
 {	
-	std::map<int, FILE*> g_fd_to_file;	
-	std::map<FILE*, ShadowZip*> g_file_to_shadowzip;
+	/*std::map<int, FILE*>*/MyMap32 g_fd_to_file;	
+	/*std::map<FILE*, ShadowZip*>*/MyMap32 g_file_to_shadowzip;
 	PthreadRwMutex g_file_to_shadowzip_mutex;
 };
 #define g_global_data (LeakSingleton<GlobalData, 0>::instance())
@@ -45,7 +46,10 @@ JNIEXPORT void JNICALL Java_io_github_noodle1983_Boostrap_init
 	jenv->ReleaseStringUTFChars(path, data_file_path);
 	MY_INFO("data file path:%s", g_data_file_path);
 
+	//all leak
     LeakSingleton<GlobalData, 0>::init();
+	g_global_data->g_fd_to_file.init(4096, 4096, "fd_to_file");
+	g_global_data->g_file_to_shadowzip.init(8192, 8192, "file_to_shadowzip");
     bootstrap();
 }
 
@@ -539,19 +543,20 @@ static int my_stat(const char *path, struct stat *file_stat)
 static ShadowZip* get_cached_shadowzip(FILE *stream)
 {
 	PthreadReadGuard(g_global_data->g_file_to_shadowzip_mutex);
-	std::map<FILE*, ShadowZip*>::iterator it = g_global_data->g_file_to_shadowzip.find(stream);
-	ShadowZip* shadow_zip = (it == g_global_data->g_file_to_shadowzip.end()) ? NULL : it->second;
+	ShadowZip* shadow_zip = NULL;
+	g_global_data->g_file_to_shadowzip.find((intptr_t)stream, (intptr_t&)shadow_zip);
 	return shadow_zip;
 }
 
 static ShadowZip* get_cached_shadowzip(int fd)
 {
 	PthreadReadGuard(g_global_data->g_file_to_shadowzip_mutex);
-	std::map<int, FILE*>::iterator it_fd = g_global_data->g_fd_to_file.find(fd);
-	FILE* stream = (it_fd == g_global_data->g_fd_to_file.end()) ? NULL : it_fd->second;
+	FILE * stream = NULL;
+	g_global_data->g_fd_to_file.find((intptr_t)fd, (intptr_t&)stream);
 	if (stream == NULL){return NULL;}
-	std::map<FILE*, ShadowZip*>::iterator it = g_global_data->g_file_to_shadowzip.find(stream);
-	ShadowZip* shadow_zip = (it == g_global_data->g_file_to_shadowzip.end()) ? NULL : it->second;
+	
+	ShadowZip* shadow_zip = NULL;
+	g_global_data->g_file_to_shadowzip.find((intptr_t)stream, (intptr_t&)shadow_zip);
 	return shadow_zip;
 }
 
@@ -586,7 +591,7 @@ static FILE *my_fopen(const char *path, const char *mode)
 		
 		MY_LOG("shadow apk in fopen: %s, fd:0x%08x, file*: 0x%08llx", path, fileno(fp), (unsigned long long)fp);
 		PthreadWriteGuard(g_global_data->g_file_to_shadowzip_mutex);
-		g_global_data->g_file_to_shadowzip[fp] = shadow_zip;
+		g_global_data->g_file_to_shadowzip.set((intptr_t)fp, (intptr_t)shadow_zip);
 		return fp;
 	}
 	
@@ -667,27 +672,25 @@ static int my_fclose(FILE* stream)
 	MY_METHOD("my_fclose: file*: 0x%08llx", (unsigned long long)stream);
 	
 	ShadowZip* shadow_zip = NULL;
-	{
+	{	
 		PthreadWriteGuard(g_global_data->g_file_to_shadowzip_mutex);
-		std::map<FILE*, ShadowZip*>::iterator it = g_global_data->g_file_to_shadowzip.find(stream);
-		shadow_zip = (it == g_global_data->g_file_to_shadowzip.end()) ? NULL : it->second;
-		if (it != g_global_data->g_file_to_shadowzip.end()){
-			g_global_data->g_file_to_shadowzip.erase(it);
-		}	
-		
-		int fd = fileno(stream);
-		MY_METHOD("my_fclose: fd: 0x%08x, file*: 0x%08llx", fd, (unsigned long long)stream);
-		std::map<int, FILE*>::iterator it_fd = g_global_data->g_fd_to_file.find(fd);
-		if(it_fd != g_global_data->g_fd_to_file.end()) 
+		if (g_global_data->g_file_to_shadowzip.find((intptr_t)stream, (intptr_t &)shadow_zip))
 		{
-			g_global_data->g_fd_to_file.erase(it_fd);
+			g_global_data->g_file_to_shadowzip.del((intptr_t)stream);
+			
+			int fd = fileno(stream);
+			MY_METHOD("my_fclose: fd: 0x%08x, file*: 0x%08llx", fd, (unsigned long long)stream);
+			g_global_data->g_fd_to_file.del((intptr_t)fd);
 		}
+		
 	}
 	
 	if (shadow_zip == NULL){
 		return old_fclose(stream);
 	}else{
-		return shadow_zip->fclose(stream);
+		int ret = shadow_zip->fclose(stream);
+		delete shadow_zip;
+		return ret;		
 	}
 }
 
@@ -752,8 +755,8 @@ static int my_open(const char *path, int flags, ...)
 		
 		MY_LOG("shadow apk: %s, fd:0x%08x, file*: 0x%08llx", path, fd, (unsigned long long)fp);
 		PthreadWriteGuard(g_global_data->g_file_to_shadowzip_mutex);
-		g_global_data->g_fd_to_file[fd] = fp;
-		g_global_data->g_file_to_shadowzip[fp] = shadow_zip;
+		g_global_data->g_fd_to_file.set((intptr_t)fd, (intptr_t)fp);
+		g_global_data->g_file_to_shadowzip.set((intptr_t)fp, (intptr_t)shadow_zip);
 		return fd;
 	}
 	
@@ -827,23 +830,25 @@ static int my_close(int fd)
 	ShadowZip* shadow_zip = NULL;
 	{
 		PthreadWriteGuard(g_global_data->g_file_to_shadowzip_mutex);
-		std::map<int, FILE*>::iterator it_fd = g_global_data->g_fd_to_file.find(fd);
-		FILE* stream = (it_fd == g_global_data->g_fd_to_file.end()) ? NULL : it_fd->second;		
-		if (stream == NULL){return old_close(fd);}
-		g_global_data->g_fd_to_file.erase(it_fd);
-			
-		MY_METHOD("my_close: fd: 0x%08x, file*: 0x%08llx", fd, (unsigned long long)stream);
-		std::map<FILE*, ShadowZip*>::iterator it = g_global_data->g_file_to_shadowzip.find(stream);
-		shadow_zip = (it == g_global_data->g_file_to_shadowzip.end()) ? NULL : it->second;
-		if (it != g_global_data->g_file_to_shadowzip.end()){
-			g_global_data->g_file_to_shadowzip.erase(it);
-		}	
+		FILE* stream = NULL;
+		if(g_global_data->g_fd_to_file.find((intptr_t)fd, (intptr_t &)stream))
+		{
+			g_global_data->g_fd_to_file.del((intptr_t)fd);
+				
+			MY_METHOD("my_close: fd: 0x%08x, file*: 0x%08llx", fd, (unsigned long long)stream);
+			if (g_global_data->g_file_to_shadowzip.find((intptr_t)stream, (intptr_t &)shadow_zip))
+			{
+				g_global_data->g_file_to_shadowzip.del((intptr_t)stream);
+			}	
+		}
 	}
 	
 	if (shadow_zip == NULL){
 		return old_close(fd);
 	}else{
-		return shadow_zip->fclose((FILE*)(size_t)fd);
+		int ret = shadow_zip->fclose((FILE*)(size_t)fd);
+		delete shadow_zip;
+		return ret;
 	}
 }
 

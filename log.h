@@ -6,24 +6,24 @@
 #if 1
 #include <android/log.h>
 #define MY_VERBOSE(...)
-#define MY_LOG(fmt,...)  __android_log_print(ANDROID_LOG_DEBUG  , "il2cpp", "[%ld]" fmt "\n", pthread_self(), ##__VA_ARGS__)
-#define MY_METHOD(fmt,...)  __android_log_print(ANDROID_LOG_INFO  , "il2cpp", "[%ld]" fmt "\n", pthread_self(), ##__VA_ARGS__)
-#define MY_INFO(fmt, ...) __android_log_print(ANDROID_LOG_INFO  , "il2cpp", "[%ld]" fmt "\n", pthread_self(), ##__VA_ARGS__)
-#define MY_ERROR(fmt,...) __android_log_print(ANDROID_LOG_ERROR  , "il2cpp", "[%ld]" fmt "\n", pthread_self(), ##__VA_ARGS__)
+#define MY_LOG(fmt,...)  __android_log_print(ANDROID_LOG_DEBUG  , "il2cpp", "[%lu]" fmt "\n", pthread_self(), ##__VA_ARGS__)
+#define MY_METHOD(fmt,...)  __android_log_print(ANDROID_LOG_INFO  , "il2cpp", "[%lu]" fmt "\n", pthread_self(), ##__VA_ARGS__)
+#define MY_INFO(fmt, ...) __android_log_print(ANDROID_LOG_INFO  , "il2cpp", "[%lu]" fmt "\n", pthread_self(), ##__VA_ARGS__)
+#define MY_ERROR(fmt,...) __android_log_print(ANDROID_LOG_ERROR  , "il2cpp", "[%lu]" fmt "\n", pthread_self(), ##__VA_ARGS__)
 
 #elif 0
 #define MY_VERBOSE(fmt, ...)
-#define MY_LOG(fmt, ...) printf( "[%ld]" fmt "\n", pthread_self(), ##__VA_ARGS__)
-#define MY_METHOD(fmt, ...) printf( "[%ld]" fmt "\n", pthread_self(), ##__VA_ARGS__)
-#define MY_ERROR(fmt, ...) printf( "[%ld]" fmt "\n", pthread_self(), ##__VA_ARGS__)
+#define MY_LOG(fmt, ...) printf( "[%lu]" fmt "\n", pthread_self(), ##__VA_ARGS__)
+#define MY_METHOD(fmt, ...) printf( "[%lu]" fmt "\n", pthread_self(), ##__VA_ARGS__)
+#define MY_ERROR(fmt, ...) printf( "[%lu]" fmt "\n", pthread_self(), ##__VA_ARGS__)
 
 #elif __ANDROID__
 #include <android/log.h>
 #define MY_VERBOSE(fmt, ...)
 #define MY_LOG(fmt, ...) 
 #define MY_METHOD(fmt, ...)
-#define MY_INFO(fmt, ...) __android_log_print(ANDROID_LOG_INFO  , "il2cpp", "[%ld]" fmt "\n", pthread_self(), ##__VA_ARGS__)
-#define MY_ERROR(fmt, ...) __android_log_print(ANDROID_LOG_ERROR  , "il2cpp", "[%ld]" fmt "\n", pthread_self(), ##__VA_ARGS__)
+#define MY_INFO(fmt, ...) __android_log_print(ANDROID_LOG_INFO  , "il2cpp", "[%lu]" fmt "\n", pthread_self(), ##__VA_ARGS__)
+#define MY_ERROR(fmt, ...) __android_log_print(ANDROID_LOG_ERROR  , "il2cpp", "[%lu]" fmt "\n", pthread_self(), ##__VA_ARGS__)
 #endif
 
 #define ALOGD MY_LOG
