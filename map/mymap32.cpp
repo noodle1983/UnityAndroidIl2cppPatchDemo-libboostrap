@@ -22,7 +22,7 @@ void MyMap32::clean()
         Node* node = list_entry(pos, Node, link);
         list_del(&node->hash);
         list_del(&node->link);
-        int index = node - mem;
+        int index = (node - mem) / sizeof(Node);
         if(index >= 0 && index < max_size) {
             list_add( &(node->link), &free_list );
         } else {
@@ -134,7 +134,7 @@ bool MyMap32::del( intptr_t key )
             list_del( &(node->hash) );
             list_del( &(node->link) );
 
-            int index = node - mem;
+            int index = (node - mem) / sizeof(Node);
             if(index >= 0 && index < max_size) {
                 list_add( &(node->link), &free_list );
             } else {
@@ -294,7 +294,7 @@ bool MyMapStr::del( const char* key )
                 list_del( &(node->link) );
                 free( node->key );
 
-                int index = node - mem;
+                int index = (node - mem) / sizeof(Node);
                 if(index >= 0 && index < max_size) {
                     list_add( &(node->link), &free_list );
                 } else {
@@ -317,7 +317,7 @@ void MyMapStr::clean()
         list_del(&node->hash);
         list_del(&node->link);
         free( node->key );
-        int index = node - mem;
+        int index = (node - mem) / sizeof(Node);
         if(index >= 0 && index < max_size) {
             list_add( &(node->link), &free_list );
         } else {
