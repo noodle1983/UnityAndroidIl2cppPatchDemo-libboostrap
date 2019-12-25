@@ -152,6 +152,16 @@ static int parse_apk(const char* _path, std::vector<ZipEntry*>& _all_entries)
             delete[] buf;
             return -1;
         }
+		
+		const char* filename = pEntry->getFileName();
+		int name_len = strlen(filename);
+		bool is_directory = name_len > 0 ? filename[name_len - 1] == '/' : true;
+		if (is_directory)
+		{
+			MY_METHOD("ignore directory:%s", filename);
+            delete pEntry;
+			continue;
+		}
 
         _all_entries.push_back(pEntry);
     }
@@ -199,7 +209,10 @@ static void add_entry_to_partition(ZipEntry* entry,
     int file_index = entry->mUserData1;
     uint64_t file_start = entry->getEntryBegin();
 	int padding = 0;
-	if (!entry->isCompressed())
+	const char* filename = entry->getFileName();
+	int name_len = strlen(filename);
+	bool is_directory = name_len > 0 ? filename[name_len - 1] == '/' : true;
+	if (!entry->isCompressed() && !is_directory)
 	{
 		uint64_t shadow_zip_raw_file_offset = pre_shadow_stop + ZipEntry::LocalFileHeader::kLFHLen + entry->mLFH.mFileNameLength + entry->mLFH.mExtraFieldLength;
 		const uint alignment = 4; 
