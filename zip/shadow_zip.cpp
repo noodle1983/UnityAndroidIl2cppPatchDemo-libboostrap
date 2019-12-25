@@ -193,11 +193,20 @@ static void add_entry_to_partition(ZipEntry* entry,
     int& pre_file_index,
     uint64_t& pre_file_stop,
     uint64_t& pre_shadow_stop,
-    std::vector<FilePartitionInfo>& patch_partitions)
+    std::vector<FilePartitionInfo>& patch_partitions, 
+	FILE* changed_entries_header_patch_file)
 {
     int file_index = entry->mUserData1;
     uint64_t file_start = entry->getEntryBegin();
-    bool can_merge = (file_index == pre_file_index) && ( file_start == pre_file_stop );
+	int padding = 0;
+	if (!entry->isCompressed())
+	{
+		uint64_t shadow_zip_raw_file_offset = pre_shadow_stop + ZipEntry::LocalFileHeader::kLFHLen + entry->mLFH.mFileNameLength + entry->mLFH.mExtraFieldLength;
+		const uint alignment = 4; 
+		padding = (alignment - (shadow_zip_raw_file_offset % alignment)) % alignment;
+	}
+	
+    bool can_merge = (file_index == pre_file_index) && ( file_start == pre_file_stop ) && padding == 0;
 
     pre_file_index = file_index;
     pre_file_stop = entry->getEntryEnd();
@@ -208,13 +217,43 @@ static void add_entry_to_partition(ZipEntry* entry,
         FilePartitionInfo& partition = patch_partitions.back(); 
         partition.shadow_stop_ += entry_size;
         partition.stop_in_file_ += entry_size;
+		pre_shadow_stop += entry_size;
     }
+	else if (padding != 0){
+		uint64_t raw_file_offset = entry->getFileOffset();
+		if (entry->addPadding(padding) != 0){
+			MY_ERROR("entry add padding failed:%s", entry->getFileName());
+			exit(-1);	
+		}
+		
+		int header_file_start = ::ftell(changed_entries_header_patch_file);
+		if (entry->mLFH.write(changed_entries_header_patch_file) != 0)
+		{			
+			MY_ERROR("write entry local file header failed:%s", entry->getFileName());
+			exit(-1);
+		}
+		int header_file_stop = ::ftell(changed_entries_header_patch_file);
+		
+		//local header changed
+		{
+			FilePartitionInfo partition(pre_shadow_stop, pre_shadow_stop + header_file_stop - header_file_start, 1, header_file_start, header_file_stop); 
+			patch_partitions.push_back(partition);		
+			pre_shadow_stop += header_file_stop - header_file_start;
+		}
+		MY_METHOD("padding %d for %s, header size:%d, file begin:0x%08zx", padding, entry->getFileName(), header_file_stop - header_file_start, (size_t)pre_shadow_stop);
+		
+		{
+			FilePartitionInfo partition(pre_shadow_stop, pre_shadow_stop + pre_file_stop - raw_file_offset, file_index, raw_file_offset, pre_file_stop); 
+			patch_partitions.push_back(partition);
+			pre_shadow_stop += pre_file_stop - raw_file_offset;	
+		}
+	}
     else{
         FilePartitionInfo partition(pre_shadow_stop, pre_shadow_stop + entry_size, file_index, file_start, pre_file_stop); 
         patch_partitions.push_back(partition);
+		pre_shadow_stop += entry_size;
     }
     
-    pre_shadow_stop += entry_size;
 }
 
 void ShadowZip::output_apk(const char* _patch_dir)
@@ -253,6 +292,12 @@ int ShadowZip::init(const char* _patch_dir, const char* _sys_apk_file)
     g_shadowzip_global_data->all_files_.clear();
     g_shadowzip_global_data->all_files_.push_back(_sys_apk_file);
     g_shadowzip_global_data->end_of_file_ = 0;
+	
+	char changed_entries_header_path[512] = {0};
+    snprintf( changed_entries_header_path, sizeof(changed_entries_header_path), "%s/.entries_header.data", _patch_dir );
+    g_shadowzip_global_data->all_files_.push_back(changed_entries_header_path);
+    FILE* changed_entries_header_patch_file = ::fopen(changed_entries_header_path, "wb");
+	std::shared_ptr<FILE> autoDel(changed_entries_header_patch_file, [](FILE* fp){::fclose(fp);});  
 
     //find all patch files
     char apk_patch_path[512] = {0};
@@ -266,7 +311,7 @@ int ShadowZip::init(const char* _patch_dir, const char* _sys_apk_file)
     //find all entries in patches
     std::vector<std::vector<ZipEntry*> > entries_in_zip_file(g_shadowzip_global_data->all_files_.size());
     std::map<std::string, ZipEntry*> filename_2_entry;
-    for(int i = 1; i < g_shadowzip_global_data->all_files_.size(); i++) {
+    for(int i = 2; i < g_shadowzip_global_data->all_files_.size(); i++) {
         std::string& zip_path = g_shadowzip_global_data->all_files_[i];
         std::vector<ZipEntry*> zip_entries;
         int ret = parse_apk(zip_path.c_str(), zip_entries);
@@ -315,7 +360,7 @@ int ShadowZip::init(const char* _patch_dir, const char* _sys_apk_file)
         if (it != filename_2_entry.end()){ entry = it->second; }
         entry->mUserData2 = 1;
         uint64_t entry_new_start = pre_shadow_stop;
-        add_entry_to_partition(entry, pre_file_index, pre_file_stop, pre_shadow_stop, g_shadowzip_global_data->patch_partitions_);
+        add_entry_to_partition(entry, pre_file_index, pre_file_stop, pre_shadow_stop, g_shadowzip_global_data->patch_partitions_, changed_entries_header_patch_file);
         entry->setLFHOffset((off_t)entry_new_start);
         all_entries.push_back(entry);
     }
@@ -326,7 +371,7 @@ int ShadowZip::init(const char* _patch_dir, const char* _sys_apk_file)
             ZipEntry* entry = entries[j];
             if (entry->mUserData2 != 0) continue;
             uint64_t entry_new_start = pre_shadow_stop;
-            add_entry_to_partition(entry, pre_file_index, pre_file_stop, pre_shadow_stop, g_shadowzip_global_data->patch_partitions_);
+            add_entry_to_partition(entry, pre_file_index, pre_file_stop, pre_shadow_stop, g_shadowzip_global_data->patch_partitions_, changed_entries_header_patch_file);
             entry->setLFHOffset((off_t)entry_new_start);
             all_entries.push_back(entry);
         }
