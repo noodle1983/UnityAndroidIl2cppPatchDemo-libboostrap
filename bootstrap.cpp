@@ -411,17 +411,10 @@ std::string get_apk_path(const std::string& bundle_id)
 }
 
 typedef int (* StatType)(const char *path, struct stat *file_stat);
-static StatType old_stat = NULL;
 static int my_stat(const char *path, struct stat *file_stat)
-{
-	if (old_stat == NULL)
-	{
-		MY_ERROR("old_stat is NULL");
-		return -1;
-	}
-	
+{	
 	memset(file_stat, 0, sizeof(struct stat));
-	int ret = old_stat(path, file_stat);
+	int ret = stat(path, file_stat);
 	if (ret != 0) {
 		return ret;
 	}
@@ -459,22 +452,16 @@ static ShadowZip* get_cached_shadowzip(int fd)
 }
 
 typedef FILE *(* FOpenType)(const char *path, const char *mode);
-static FOpenType old_fopen = NULL;
 static FILE *my_fopen(const char *path, const char *mode)
 {	
-	MY_METHOD("fopen([%s],[%s]) old:%zx", path, mode, (size_t)old_fopen);
-	if (old_fopen == NULL)
-	{
-		MY_ERROR("fopen is NULL");
-		return old_fopen(path, mode);
-	}
+	MY_METHOD("fopen([%s],[%s])", path, mode);
 	
 	struct stat file_stat;
 	memset(&file_stat, 0, sizeof(struct stat));
-	if (old_stat(path, &file_stat) != 0) {
+	if (stat(path, &file_stat) != 0) {
 		
 		MY_METHOD("not exist([%s],[%s])", path, mode);
-		return old_fopen(path, mode);
+		return fopen(path, mode);
 	}
 	
 	if (g_apk_device_id == file_stat.st_dev && g_apk_ino == file_stat.st_ino)
@@ -484,7 +471,7 @@ static FILE *my_fopen(const char *path, const char *mode)
 		if (fp == NULL){	
 			MY_ERROR("something bad happens!");
 			delete shadow_zip;
-			return old_fopen(path, mode); 
+			return fopen(path, mode); 
 		}	
 		
 		MY_LOG("shadow apk in fopen: %s, fd:0x%08x, file*: 0x%08llx", path, fileno(fp), (unsigned long long)fp);
@@ -494,77 +481,71 @@ static FILE *my_fopen(const char *path, const char *mode)
 	}
 	
 	MY_METHOD("not apk([%s],[%s])", path, mode);
-	return old_fopen(path, mode);
+	return fopen(path, mode);
 }
 
 
 typedef int (*FseekType)(FILE *stream, long offset, int whence);
-static FseekType old_fseek = NULL;
 static int my_fseek(FILE *stream, long offset, int whence)
 {
 	
 	ShadowZip* shadow_zip = get_cached_shadowzip(stream);
 	if (shadow_zip == NULL){
-		return old_fseek(stream, offset, whence);
+		return fseek(stream, offset, whence);
 	}else{
 		return shadow_zip->fseek(stream, offset, whence);
 	}
 }
 
 typedef long (*FtellType)(FILE *stream);
-static FtellType old_ftell = NULL;
 static int my_ftell(FILE *stream)
 {
 	
 	ShadowZip* shadow_zip = get_cached_shadowzip(stream);
 	if (shadow_zip == NULL){
-		return old_ftell(stream);
+		return ftell(stream);
 	}else{
 		return shadow_zip->ftell(stream);
 	}
 }
 
 typedef void (*RewindType)(FILE *stream);
-static RewindType old_rewind = NULL;
 static void myrewind(FILE *stream)
 {
 	
 	ShadowZip* shadow_zip = get_cached_shadowzip(stream);
 	if (shadow_zip == NULL){
-		old_rewind(stream);
+		rewind(stream);
 	}else{
 		shadow_zip->rewind(stream);
 	}
 }
 
 typedef size_t (*FreadType)(void *ptr, size_t size, size_t nmemb, FILE *stream);
-static FreadType old_fread = NULL;
 static size_t my_fread(void *ptr, size_t size, size_t nmemb, FILE *stream)
 {
 	
 	ShadowZip* shadow_zip = get_cached_shadowzip(stream);
 	if (shadow_zip == NULL){
-		return old_fread(ptr, size, nmemb, stream);
+		return fread(ptr, size, nmemb, stream);
 	}else{
 		return shadow_zip->fread(ptr, size, nmemb, stream);
 	}
 }
 
 typedef char * (*Fgets)(char *s, int size, FILE *stream);
-static Fgets old_fgets = NULL;
 static char * my_fgets(char *s, int size, FILE *stream)
 {
 	
 	ShadowZip* shadow_zip = get_cached_shadowzip(stream);
 	if (shadow_zip == NULL){
-		return old_fgets(s, size, stream);
+		return fgets(s, size, stream);
 	}else{
 		return shadow_zip->fgets(s, size, stream);
 	}
 }
 
 typedef int (*FcloseType)(FILE* _fp);
-static FcloseType old_fclose = NULL;
 static int my_fclose(FILE* stream)
 {
 	MY_METHOD("my_fclose: file*: 0x%08llx", (unsigned long long)stream);
@@ -584,7 +565,7 @@ static int my_fclose(FILE* stream)
 	}
 	
 	if (shadow_zip == NULL){
-		return old_fclose(stream);
+		return fclose(stream);
 	}else{
 		int ret = shadow_zip->fclose(stream);
 		delete shadow_zip;
@@ -593,7 +574,6 @@ static int my_fclose(FILE* stream)
 }
 
 typedef void *(*DlopenType)(const char *filename, int flags);
-static DlopenType old_dlopen = NULL;
 static void *my_dlopen(const char *filename, int flags)
 {
 	
@@ -605,21 +585,14 @@ static void *my_dlopen(const char *filename, int flags)
 		char link_file[256] = {0};
 		snprintf(link_file, sizeof(link_file), "%s/libil2cpp.so", g_data_file_path);
 		MY_LOG("redirect to %s", link_file);
-		return old_dlopen(link_file, flags);
+		return dlopen(link_file, flags);
 	}
-	return old_dlopen(filename, flags);
+	return dlopen(filename, flags);
 }
 
 typedef int (*OpenType)(const char *path, int flags, ...);
-static OpenType old_open = NULL;
 static int my_open(const char *path, int flags, ...)
-{	
-	if (old_open == NULL)
-	{
-		MY_ERROR("open is NULL");
-		return -1;
-	}
-	
+{		
 	mode_t mode = -1;
 	int has_mode = ((flags & O_CREAT) == O_CREAT) || ((flags & 020000000) == 020000000);
 	if (has_mode)
@@ -632,8 +605,8 @@ static int my_open(const char *path, int flags, ...)
 	
 	struct stat file_stat;
 	memset(&file_stat, 0, sizeof(struct stat));
-	if (old_stat(path, &file_stat) != 0) {
-		int ret = has_mode ? old_open(path, flags, mode) : old_open(path, flags);
+	if (stat(path, &file_stat) != 0) {
+		int ret = has_mode ? open(path, flags, mode) : open(path, flags);
 		MY_METHOD("open(can't access): %s -> fd:0x%08x", path, ret);
 		return ret;
 	}
@@ -645,7 +618,7 @@ static int my_open(const char *path, int flags, ...)
 		if (fp == NULL){	
 			MY_ERROR("something bad happens!");
 			delete shadow_zip;
-			int ret = has_mode ? old_open(path, flags, mode) : old_open(path, flags);
+			int ret = has_mode ? open(path, flags, mode) : open(path, flags);
 			MY_METHOD("open(rollback): %s -> fd:0x%08x", path, ret);
 			return ret;
 		}	
@@ -658,13 +631,12 @@ static int my_open(const char *path, int flags, ...)
 		return fd;
 	}
 	
-	int ret = has_mode ? old_open(path, flags, mode) : old_open(path, flags);
+	int ret = has_mode ? open(path, flags, mode) : open(path, flags);
 	MY_METHOD("not apk open: %s -> fd:0x%08x", path, ret);
 	return ret;
 }
 
 typedef ssize_t(*ReadType)(int fd, void *buf, size_t nbyte);
-static ReadType old_read = NULL;
 static ssize_t my_read(int fd, void *buf, size_t nbyte)
 {
 	MY_METHOD("read: 0x%08x, %zu", fd, nbyte);
@@ -673,7 +645,7 @@ static ssize_t my_read(int fd, void *buf, size_t nbyte)
 	ssize_t ret = 0;
 	ShadowZip* shadow_zip = get_cached_shadowzip(fd);
 	if (shadow_zip == NULL){
-		ret = old_read(fd, buf, nbyte);
+		ret = read(fd, buf, nbyte);
 	}else{
 		ret = shadow_zip->fread(buf, 1, nbyte, (FILE*)(size_t)fd);
 	}
@@ -682,7 +654,6 @@ static ssize_t my_read(int fd, void *buf, size_t nbyte)
 }
 
 typedef off_t (*LseekType)(int fd, off_t offset, int whence);
-static LseekType old_lseek = NULL;
 off_t my_lseek(int fd, off_t offset, int whence)
 {
 	MY_METHOD("lseek: 0x%08x, offset: 0x%08lx, whence: %d", fd, offset, whence);
@@ -691,7 +662,7 @@ off_t my_lseek(int fd, off_t offset, int whence)
 	off_t ret = 0;
 	ShadowZip* shadow_zip = get_cached_shadowzip(fd);
 	if (shadow_zip == NULL){
-		ret = old_lseek(fd, offset, whence);
+		ret = lseek(fd, offset, whence);
 	}else{
 		ret = shadow_zip->fseek((FILE*)(size_t)fd, offset, whence);
 		if (ret == 0){ret = shadow_zip->ftell((FILE*)(size_t)fd);}
@@ -701,7 +672,6 @@ off_t my_lseek(int fd, off_t offset, int whence)
 }
 
 typedef off64_t (*Lseek64Type)(int fd, off64_t offset, int whence);
-static Lseek64Type old_lseek64 = NULL;
 off64_t my_lseek64(int fd, off64_t offset, int whence)
 {
 	MY_METHOD("lseek64: 0x%08x, offset: 0x%08llx, whence: %d", fd, (unsigned long long)offset, whence);
@@ -709,7 +679,7 @@ off64_t my_lseek64(int fd, off64_t offset, int whence)
 	off64_t ret = 0;
 	ShadowZip* shadow_zip = get_cached_shadowzip(fd);
 	if (shadow_zip == NULL){
-		ret =  old_lseek64(fd, offset, whence);
+		ret =  lseek64(fd, offset, whence);
 	}else{
 		ret =  shadow_zip->fseek((FILE*)(size_t)fd, offset, whence);
 		if (ret == 0){ret = shadow_zip->ftell((FILE*)(size_t)fd);}
@@ -719,7 +689,6 @@ off64_t my_lseek64(int fd, off64_t offset, int whence)
 }
 
 typedef int (*CloseType)(int fd);
-static CloseType old_close = NULL;
 static int my_close(int fd)
 {
 	MY_METHOD("my_close: 0x%08x", fd);
@@ -742,7 +711,7 @@ static int my_close(int fd)
 	}
 	
 	if (shadow_zip == NULL){
-		return old_close(fd);
+		return close(fd);
 	}else{
 		int ret = shadow_zip->fclose((FILE*)(size_t)fd);
 		delete shadow_zip;
@@ -818,7 +787,7 @@ static int init_hook(const std::string& bundle_id)
 	//dlclose(handle);
 	*/
 #define HOOK(lib, symbol) \
-	if(0 != xhook_register(lib, #symbol, (void*)my_##symbol, (void **)&old_##symbol)){ \
+	if(0 != xhook_register(lib, #symbol, (void*)my_##symbol, NULL)){ \
 		MY_ERROR("failed to find function:%s in %s", #symbol, lib); \
 		return -1; \
 	}
@@ -845,23 +814,6 @@ static int init_hook(const std::string& bundle_id)
 	}	
 	
 	return 0;
-}
-
-static DlopenType art_old_dlopen = NULL;
-static void *my_art_dlopen(const char *filename, int flags)
-{
-	MY_LOG("art redirect to %s", filename);
-	int il2cpp_postfix_len = strlen("libil2cpp.so");
-	int len = strlen(filename);
-	if (len > il2cpp_postfix_len && memcmp(filename + len - il2cpp_postfix_len, "libil2cpp.so", il2cpp_postfix_len) == 0)
-	{		
-		std::string bundle_id = get_bundle_id();	
-		char link_file[256] = {0};
-		snprintf(link_file, sizeof(link_file), "%s/libil2cpp.so", g_data_file_path);
-		MY_LOG("art redirect to %s", link_file);
-		return art_old_dlopen(link_file, flags);
-	}
-	return art_old_dlopen(filename, flags);
 }
 
 static int init_art_hook()
