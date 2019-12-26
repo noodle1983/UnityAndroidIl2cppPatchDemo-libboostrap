@@ -2,6 +2,7 @@
 #include "singleton.hpp"
 #include <map>
 #include <iostream>
+#include <string>
 
 
 struct GlobalData
@@ -9,9 +10,9 @@ struct GlobalData
 	std::map<int, int> g_fd_to_file;	
 	PthreadRwMutex g_file_to_shadowzip_mutex;
 };
-#define g_global_data (Singleton<GlobalData, 0>::instance())
+#define g_global_data (LeakSingleton<GlobalData, 0>::instance())
 
-long long count;
+int count;
 const size_t THREAD_NUM = 6; 
 
 void increment_count()
@@ -48,7 +49,7 @@ void *thread_proc(void *arg)
 
 int main(int argc, char *argv[])
 {
-	
+	LeakSingleton<GlobalData, 0>::init();
     pthread_t threadids[THREAD_NUM];
     for(size_t i = 0; i < THREAD_NUM; i++)
     {

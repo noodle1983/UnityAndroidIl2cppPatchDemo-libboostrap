@@ -5,7 +5,6 @@
 #include <sys/types.h>
 #include <dirent.h>
 #include <assert.h>
-#include <memory>
 #include <string.h>
 
 using namespace android;
@@ -16,6 +15,15 @@ struct ShadowZipGlobalData
     std::vector<FilePartitionInfo> patch_partitions_;
     std::vector<std::string> all_files_;
     uint64_t end_of_file_;
+};
+
+class FileHandleReleaser
+{
+public:
+	FileHandleReleaser(FILE* fp){fp_ = fp;}
+	virtual ~FileHandleReleaser(){::fclose(fp_);}
+private:
+	FILE* fp_;	
 };
 
 #define g_shadowzip_global_data (LeakSingleton<ShadowZipGlobalData, 0>::instance())
@@ -51,7 +59,7 @@ static int parse_apk(const char* _path, std::vector<ZipEntry*>& _all_entries)
 		MY_ERROR("failure parse file %s", _path);
         return -1;
 	}
-	std::shared_ptr<FILE> autoDel(fp, [](FILE* fp){::fclose(fp);});
+	FileHandleReleaser autoDel(fp);
 	
     fseek(fp, 0, SEEK_END);
     fileLength = ftell(fp);
@@ -310,7 +318,7 @@ int ShadowZip::init(const char* _patch_dir, const char* _sys_apk_file)
     snprintf( changed_entries_header_path, sizeof(changed_entries_header_path), "%s/.entries_header.data", _patch_dir );
     g_shadowzip_global_data->all_files_.push_back(changed_entries_header_path);
     FILE* changed_entries_header_patch_file = ::fopen(changed_entries_header_path, "wb");
-	std::shared_ptr<FILE> autoDel(changed_entries_header_patch_file, [](FILE* fp){::fclose(fp);});  
+	FileHandleReleaser autoDel(changed_entries_header_patch_file);  
 
     //find all patch files
     char apk_patch_path[512] = {0};
