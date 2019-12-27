@@ -405,7 +405,8 @@ int ShadowZip::init(const char* _patch_dir, const char* _sys_apk_file)
     FILE* end_patch_file = ::fopen(end_patch_path, "wb");
     for(int i = 0; i < all_entries.size(); i++) {
         ZipEntry* entry = all_entries[i];
-		MY_LOG("%s, method:%d, LFHOffset:%08lx", entry->getFileName(), entry->mCDE.mCompressionMethod, entry->getLFHOffset());
+		MY_LOG("mapping [%08lx-%08lx-%08lx-%08lx] %s, method:%d, ", entry->getEntryBegin(), entry->getFileOffset(), entry->getFileOffset() + entry->getCompressedLen(), entry->getEntryEnd(), 
+			entry->getFileName(), entry->mCDE.mCompressionMethod);
         entry->mCDE.write(end_patch_file);
     }
     EndOfCentralDir end_of_cd;
