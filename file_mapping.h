@@ -24,8 +24,12 @@ struct FileExtraData
 	int fd;
 };
 
+// posix shm is not supported on Android.
+// we should use memfd, but it is not supported in older android(platform api < 26) 
+// https://developer.android.google.cn/ndk/reference/group/memory.html
+// file fd is slow theoratically, but it is ok on a flash disk and I don't notice it.
+// no other choice, as the mutex is buggy in fclose with timing irq.
 
-// we should use memfd, but it is not supported in older android
 static int init_file_mapping_data()
 {
 	char fds_dir[512] = {0};
