@@ -1,0 +1,1 @@
+adb push obj/local/armeabi-v7a/libbootstrap.so /data/local/tmp/ && pause

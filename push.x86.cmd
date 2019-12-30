@@ -1,0 +1,1 @@
+adb push obj/local/x86/libbootstrap.so /data/local/tmp/ && pause
