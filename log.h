@@ -3,7 +3,7 @@
 
 #include <pthread.h>
 
-#if 1
+#if 0
 #include <android/log.h>
 #define MY_VERBOSE(...)
 #define MY_LOG(fmt,...)  __android_log_print(ANDROID_LOG_DEBUG  , "il2cpp", "[%zx]" fmt "\n", (size_t)pthread_self(), ##__VA_ARGS__)
