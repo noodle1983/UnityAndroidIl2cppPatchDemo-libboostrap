@@ -10,14 +10,7 @@
 #include "xhook/xhook.h"
 #include "com_unity3d_hookplayer_Boostrap.h"
 #include "mymap32.h"
-
-struct GlobalData
-{	
-	/*std::map<int, FILE*>*/MyMap32 g_fd_to_file;	
-	/*std::map<FILE*, ShadowZip*>*/MyMap32 g_file_to_shadowzip;
-	PthreadRwMutex g_file_to_shadowzip_mutex;
-};
-#define g_global_data (LeakSingleton<GlobalData, 0>::instance())
+#include "file_mapping.h"
 
 
 static inline char * dupstr(const char* const str)
@@ -40,9 +33,6 @@ std::string get_apk_path(const std::string& bundle_id);
 __attribute__ ((visibility ("default")))
 JNIEXPORT int JNICALL Java_com_unity3d_hookplayer_Boostrap_init(JNIEnv * jenv, jclass cls)
 {
-	LeakSingleton<GlobalData, 0>::init();
-	g_global_data->g_fd_to_file.init(4096, 4096, "fd_to_file");
-	g_global_data->g_file_to_shadowzip.init(8192, 8192, "file_to_shadowzip");
     return bootstrap();
 }
 
@@ -81,7 +71,7 @@ JNIEXPORT char* JNICALL Java_com_unity3d_hookplayer_Boostrap_getAbi(JNIEnv * jen
 	return dupstr(TARGET_ARCH_ABI);
 }*/
 
-static char* g_use_data_path = NULL;
+char* g_use_data_path = NULL;
 __attribute__ ((visibility ("default")))
 JNIEXPORT int JNICALL Java_com_unity3d_hookplayer_Boostrap_useDataDir(JNIEnv * jenv, jclass cls, jstring data_path_str, jstring apk_path_str)
 {
@@ -444,22 +434,14 @@ static int my_stat(const char *path, struct stat *file_stat)
 
 static ShadowZip* get_cached_shadowzip(FILE *stream)
 {
-	PthreadReadGuard(g_global_data->g_file_to_shadowzip_mutex);
-	ShadowZip* shadow_zip = NULL;
-	g_global_data->g_file_to_shadowzip.find((intptr_t)stream, (intptr_t&)shadow_zip);
-	return shadow_zip;
+	FileExtraData* file_extra_data = get_file_mapping(stream);
+	return file_extra_data == NULL ? NULL : file_extra_data->shadow_zip;
 }
 
 static ShadowZip* get_cached_shadowzip(int fd)
 {
-	PthreadReadGuard(g_global_data->g_file_to_shadowzip_mutex);
-	FILE * stream = NULL;
-	g_global_data->g_fd_to_file.find((intptr_t)fd, (intptr_t&)stream);
-	if (stream == NULL){return NULL;}
-	
-	ShadowZip* shadow_zip = NULL;
-	g_global_data->g_file_to_shadowzip.find((intptr_t)stream, (intptr_t&)shadow_zip);
-	return shadow_zip;
+	FileExtraData* file_extra_data = get_file_mapping(fd);
+	return file_extra_data == NULL ? NULL : file_extra_data->shadow_zip;
 }
 
 typedef FILE *(* FOpenType)(const char *path, const char *mode);
@@ -485,10 +467,9 @@ static FILE *my_fopen(const char *path, const char *mode)
 			return fopen(path, mode); 
 		}	
 		
-		MY_LOG("shadow apk in fopen: %s, fd:0x%08x, file*: 0x%08llx", path, fileno(fp), (unsigned long long)fp);
-		PthreadWriteGuard(g_global_data->g_file_to_shadowzip_mutex);
-		g_global_data->g_file_to_shadowzip.set((intptr_t)fp, (intptr_t)shadow_zip);
-		return fp;
+		FileExtraData* file_extra_data = save_file_mapping(shadow_zip);
+		MY_LOG("shadow apk in fopen: %s, fd:0x%08x, file*: 0x%08llx", path, file_extra_data->fd, (unsigned long long)file_extra_data->file);	
+		return file_extra_data->file;
 	}
 	
 	MY_METHOD("not apk([%s],[%s])", path, mode);
@@ -561,26 +542,15 @@ static int my_fclose(FILE* stream)
 {
 	MY_METHOD("my_fclose: file*: 0x%08llx", (unsigned long long)stream);
 	
-	ShadowZip* shadow_zip = NULL;
-	{	
-		PthreadWriteGuard(g_global_data->g_file_to_shadowzip_mutex);
-		if (g_global_data->g_file_to_shadowzip.find((intptr_t)stream, (intptr_t &)shadow_zip))
-		{
-			g_global_data->g_file_to_shadowzip.del((intptr_t)stream);
-			
-			int fd = fileno(stream);
-			MY_METHOD("my_fclose: fd: 0x%08x, file*: 0x%08llx", fd, (unsigned long long)stream);
-			g_global_data->g_fd_to_file.del((intptr_t)fd);
-		}
-		
+	FileExtraData* file_extra_data = get_file_mapping(stream);
+	if (file_extra_data != NULL)
+	{
+		clean_mapping_data(file_extra_data);
+		return 0;
 	}
-	
-	if (shadow_zip == NULL){
-		return fclose(stream);
-	}else{
-		int ret = shadow_zip->fclose(stream);
-		delete shadow_zip;
-		return ret;		
+	else
+	{
+		return fclose(stream);		
 	}
 }
 
@@ -633,13 +603,10 @@ static int my_open(const char *path, int flags, ...)
 			MY_METHOD("open(rollback): %s -> fd:0x%08x", path, ret);
 			return ret;
 		}	
-		int fd = fileno(fp);
 		
-		MY_LOG("shadow apk: %s, fd:0x%08x, file*: 0x%08llx", path, fd, (unsigned long long)fp);
-		PthreadWriteGuard(g_global_data->g_file_to_shadowzip_mutex);
-		g_global_data->g_fd_to_file.set((intptr_t)fd, (intptr_t)fp);
-		g_global_data->g_file_to_shadowzip.set((intptr_t)fp, (intptr_t)shadow_zip);
-		return fd;
+		FileExtraData* file_extra_data = save_file_mapping(shadow_zip);
+		MY_LOG("shadow apk in open: %s, fd:0x%08x, file*: 0x%08llx", path, file_extra_data->fd, (unsigned long long)file_extra_data->file);	
+		return file_extra_data->fd;
 	}
 	
 	int ret = has_mode ? open(path, flags, mode) : open(path, flags);
@@ -668,8 +635,7 @@ typedef off_t (*LseekType)(int fd, off_t offset, int whence);
 off_t my_lseek(int fd, off_t offset, int whence)
 {
 	MY_METHOD("lseek: 0x%08x, offset: 0x%08lx, whence: %d", fd, offset, whence);
-	
-	
+		
 	off_t ret = 0;
 	ShadowZip* shadow_zip = get_cached_shadowzip(fd);
 	if (shadow_zip == NULL){
@@ -704,29 +670,15 @@ static int my_close(int fd)
 {
 	MY_METHOD("my_close: 0x%08x", fd);
 	
-	
-	ShadowZip* shadow_zip = NULL;
+	FileExtraData* file_extra_data = get_file_mapping(fd);
+	if (file_extra_data != NULL)
 	{
-		PthreadWriteGuard(g_global_data->g_file_to_shadowzip_mutex);
-		FILE* stream = NULL;
-		if(g_global_data->g_fd_to_file.find((intptr_t)fd, (intptr_t &)stream))
-		{
-			g_global_data->g_fd_to_file.del((intptr_t)fd);
-				
-			MY_METHOD("my_close: fd: 0x%08x, file*: 0x%08llx", fd, (unsigned long long)stream);
-			if (g_global_data->g_file_to_shadowzip.find((intptr_t)stream, (intptr_t &)shadow_zip))
-			{
-				g_global_data->g_file_to_shadowzip.del((intptr_t)stream);
-			}	
-		}
+		clean_mapping_data(file_extra_data);
+		return 0;
 	}
-	
-	if (shadow_zip == NULL){
-		return close(fd);
-	}else{
-		int ret = shadow_zip->fclose((FILE*)(size_t)fd);
-		delete shadow_zip;
-		return ret;
+	else
+	{
+		return close(fd);	
 	}
 }
 
@@ -870,7 +822,7 @@ static int bootstrap()
 	
 	if (use_patch){
 		MY_INFO("bootstrap running %s with apk_path:%s", TARGET_ARCH_ABI, g_apk_file_path);	
-		bool success = (0 == ShadowZip::init(g_use_data_path, g_apk_file_path)) && (0 == init_hook(bundle_id)) && (0 == init_art_hook());
+		bool success = (0 == ShadowZip::init(g_use_data_path, g_apk_file_path)) && (0 == init_hook(bundle_id)) && (0 == init_file_mapping_data());
 		if (success)
 		{			
 			static void *handle = dlopen(patch_il2cpp_path.c_str(), RTLD_NOW);
