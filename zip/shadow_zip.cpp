@@ -320,11 +320,14 @@ int ShadowZip::init(const char* _patch_dir, const char* _sys_apk_file)
     FILE* changed_entries_header_patch_file = ::fopen(changed_entries_header_path, "wb");
 	FileHandleReleaser autoDel(changed_entries_header_patch_file);  
 
+    //set before get files
+	int persist_file_count = g_shadowzip_global_data->all_files_.size();
+	
     //find all patch files
     char apk_patch_path[512] = {0};
     snprintf( apk_patch_path, sizeof(apk_patch_path), "%s/assets_bin_Data", _patch_dir );
     get_files( apk_patch_path, g_shadowzip_global_data->all_files_ );
-    if( g_shadowzip_global_data->all_files_.size() <= 1 ){
+    if( g_shadowzip_global_data->all_files_.size() <= persist_file_count ){
         MY_INFO("no apk patches:[%s/assets_bin_Data]", _patch_dir);
         return -1;
     }
