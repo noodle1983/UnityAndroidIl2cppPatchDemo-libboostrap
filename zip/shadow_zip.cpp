@@ -190,6 +190,8 @@ static int parse_apk(const char* _path, std::vector<ZipEntry*>& _all_entries)
             return -1;
         }
     }
+    delete[] buf;
+	MY_LOG("got %zu entries[%u] in file %s", _all_entries.size(), (unsigned)sizeof(ZipEntry), _path);
     return 0;
 }
 
@@ -512,6 +514,7 @@ off64_t ShadowZip::fseek(FILE *stream, off64_t offset, int whence)
     }
     if (pos_ < 0 || pos_ > end_of_file_){
         pos_ = cur_pos;
+		MY_ERROR("fseek failed: pos:0x%08llx, end_of_file:0x%08llx", (unsigned long long)pos_, (unsigned long long)end_of_file_);
         return -1;
     }
     return 0;
