@@ -24,7 +24,7 @@ LOCAL_SRC_FILES := \
 	zip/ZipEntry.cpp \
 	zip/ZipFile.cpp
 
-LOCAL_CFLAGS := -Izip -Imap -DTARGET_ARCH_ABI=\"$(TARGET_ARCH_ABI)\"  -std=c11 -fvisibility=hidden
+LOCAL_CFLAGS := -Izip -Imap -DTARGET_ARCH_ABI=\"$(TARGET_ARCH_ABI)\"  -fvisibility=hidden
 LOCAL_CPPFLAGS := -Izip -Imap -DTARGET_ARCH_ABI=\"$(TARGET_ARCH_ABI)\"  -std=c++11 -fvisibility=hidden
 
 LOCAL_LDLIBS := -llog -L$(LOCAL_PATH)/../../libs/$(TARGET_ARCH_ABI)
@@ -48,7 +48,7 @@ cmd-strip = $(TOOLCHAIN_PREFIX)strip --strip-unneeded -x $1
 
 LOCAL_SRC_FILES := unittest/test_mutex.cpp
 
-LOCAL_CFLAGS :=  -g -O0 -std=c11 -fvisibility=hidden -pie -fPIE
+LOCAL_CFLAGS :=  -g -O0 -fvisibility=hidden -pie -fPIE
 LOCAL_CPPFLAGS := -g -O0 -std=c++11 -fvisibility=hidden -pie -fPIE
 
 LOCAL_LDFLAGS += -pie -fPIE
