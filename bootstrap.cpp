@@ -11,6 +11,7 @@
 #include "io_github_noodle1983_Boostrap.h"
 #include "mymap32.h"
 #include "file_mapping.h"
+#include "serial_utils.h"
 
 
 static inline char * dupstr(const char* const str)
@@ -27,6 +28,7 @@ static inline char * dupstr(const char* const str)
 const char* SPLITER = ";";
 const char* g_data_file_path = NULL;
 const char* g_apk_file_path = NULL;
+const char* g_bundle_id = NULL;
 static void bootstrap();
 std::string get_apk_path(const std::string& bundle_id);
 
@@ -62,69 +64,24 @@ static std::string get_bundle_id()
 	return std::string(bundle_id);
 }
 
-__attribute__ ((visibility ("default")))
-char* get_arch_abi()
+static bool copy_file(const char* const from_path, const char* const to_path)
 {
-	return dupstr(TARGET_ARCH_ABI);
-}
-
-char* g_use_data_path = NULL;
-__attribute__ ((visibility ("default")))
-char* use_data_dir(const char* data_path, const char* apk_path)
-{
-	if (strlen(data_path) > 0){
-		DIR* dir = opendir(data_path);
-		if (dir == NULL)
-		{
-			MY_ERROR("can't access data path:%s", data_path);
-			return strdup("can't access data dir!");		
-		}
-		closedir(dir);
-	}
-	
-	std::string bundle_id = get_bundle_id();
-	char patch_info_path[256] = {0};
-	snprintf(patch_info_path, sizeof(patch_info_path), "%s/user.db",  g_data_file_path);
-	
-	std::fstream patch_info_file(patch_info_path, std::fstream::out|std::fstream::trunc);
-	if (!patch_info_file.is_open())
-	{	
-		char error_str[256] = {0};
-		snprintf(error_str, sizeof(error_str), "can't store data path. error:%s", strerror(errno));
-		MY_ERROR("can't access to %s. %s", patch_info_path, error_str);
-		return dupstr(error_str);
-	}
-	patch_info_file.write(data_path, strlen(data_path));	
-	patch_info_file.write(SPLITER, strlen(SPLITER));	
-	patch_info_file.write(apk_path, strlen(apk_path));	
-	patch_info_file.close();
-	return NULL;
-}
-
-static bool pre_process_so_lib(const char* const so_path, const char* const so_name, const std::string& bundle_id)
-{
-	char link_file[256] = {0};
-	snprintf(link_file, sizeof(link_file), "%s/%s", g_data_file_path, so_name);
-	
-	MY_LOG("link %s to %s", so_path, link_file);
-	
-	//symlink(so_path, link_file);
-	unlink(link_file);
+	MY_LOG("copy %s to %s", from_path, to_path);
 	
 	int fd_to, fd_from;
     char buf[4096];
     ssize_t nread;
     int saved_errno;
 
-    fd_from = open(so_path, O_RDONLY);
+    fd_from = open(from_path, O_RDONLY);
     if (fd_from < 0){
-		MY_ERROR("can't access to %s.", so_path);
+		MY_ERROR("can't access to %s.", from_path);
         return false;
 	}
 
-    fd_to = open(link_file, O_WRONLY | O_CREAT | O_EXCL, 0755);
+    fd_to = open(to_path, O_WRONLY | O_CREAT | O_EXCL, 0755);
     if (fd_to < 0){		
-		MY_ERROR("can't access to %s.", so_path);
+		MY_ERROR("can't access to %s.", to_path);
 		close( fd_from );
         return false;
 	}
@@ -139,7 +96,7 @@ static bool pre_process_so_lib(const char* const so_path, const char* const so_n
                 out_ptr += nwritten;
             }
             else if (errno != EINTR) {	
-				MY_ERROR("can't write to %s. errno:%d", so_path, errno);
+				MY_ERROR("can't write to %s. errno:%d", to_path, errno);
 				close( fd_from );
 				close( fd_to );
                 return false;
@@ -148,10 +105,11 @@ static bool pre_process_so_lib(const char* const so_path, const char* const so_n
     }
 	close( fd_from );
 	close( fd_to );
+
 	return true;
 }
 
-static bool pre_process_all_so_lib(const char* const data_path, const std::string& bundle_id)
+static bool prepare_so_lib(const char* const data_path, const std::string& bundle_id)
 {
 	DIR* dir = opendir(data_path);
 	if (dir == NULL)
@@ -159,6 +117,121 @@ static bool pre_process_all_so_lib(const char* const data_path, const std::strin
 		MY_ERROR("can't access data path:%s", data_path);
 		return false;		
 	}
+
+    const char* NEW_SO_POSTFIX = ".new";
+    int new_file_postfix_len = strlen(NEW_SO_POSTFIX);
+	
+	struct dirent *ent = NULL;
+	while((ent = readdir(dir)) != NULL)
+    {
+        if(ent->d_type & DT_DIR) { continue; }
+		
+        const char* filename = ent->d_name;
+		int len = strlen(filename);
+		
+        if (len > new_file_postfix_len && memcmp(filename + len - new_file_postfix_len, NEW_SO_POSTFIX, new_file_postfix_len) == 0)
+		{
+            // copy patch_dir/xxx.new -> data/files/xxx.new
+            char from_filepath[256] = {0};
+            snprintf(from_filepath, sizeof(from_filepath), "%s/%s", data_path, filename);
+            char to_filepath[256] = {0};
+            snprintf(to_filepath, sizeof(to_filepath), "%s/%s", g_data_file_path, filename);
+            copy_file(from_filepath, to_filepath);
+
+            // rename patch_dir/xxx.new -> data/files/xxx
+            // if rollback, rename back before prepare_so_lib
+            char new_filepath[256] = {0};
+            strncpy(new_filepath, from_filepath, sizeof(new_filepath));
+            new_filepath[strlen(from_filepath) - new_file_postfix_len] = '\0';
+			unlink(new_filepath);
+			rename(from_filepath, new_filepath);
+			continue;
+		}
+    }
+	closedir(dir);
+	return true;
+	
+}
+
+__attribute__ ((visibility ("default")))
+char* get_arch_abi()
+{
+	return dupstr(TARGET_ARCH_ABI);
+}
+
+char* g_use_data_path = NULL;
+__attribute__ ((visibility ("default")))
+char* use_data_dir(const char* data_path, const char* useless)
+{	
+	char formal_patch_info_path[256] = {0};
+	snprintf(formal_patch_info_path, sizeof(formal_patch_info_path), "%s/user.db",  g_data_file_path);
+	if (strlen(data_path) == 0){
+		unlink(formal_patch_info_path);
+		return NULL;
+	}
+	
+	if (strlen(data_path) > 0){
+		DIR* dir = opendir(data_path);
+		if (dir == NULL)
+		{
+			MY_ERROR("can't access data path:%s", data_path);
+			return strdup("can't access data dir!");		
+		}
+		closedir(dir);
+	}
+	
+	std::string bundle_id = get_bundle_id();
+
+    //1. prepare so lib
+    prepare_so_lib(data_path, bundle_id);
+
+    //2. pre-find apk path
+	std::string apk_path_string = get_apk_path(bundle_id);
+
+    //3. pre-calc partition
+    ShadowZipGlobalData global_data;
+    if(0 != ShadowZip::init(data_path, apk_path_string.c_str(), &global_data)){
+		char error_str[256] = {0};
+		snprintf(error_str, sizeof(error_str), "failed to do ShadowZip::init(%s, %s)", data_path, apk_path_string.c_str());
+		MY_ERROR("%s", error_str);
+		return dupstr(error_str);
+    }
+
+	char patch_info_path[256] = {0};
+	snprintf(patch_info_path, sizeof(patch_info_path), "%s/user.db.tmp",  g_data_file_path);
+	
+    FILE* fw = ::fopen(patch_info_path, "wb");
+	if (fw == NULL) 
+	{
+		char error_str[256] = {0};
+		snprintf(error_str, sizeof(error_str), "can't open:%s, errno:%d", patch_info_path, errno);
+		MY_ERROR("can't open:%s, errno:%d", patch_info_path, errno);
+		return dupstr(error_str);
+	}
+	serial_uint32(fw, 5460);
+    serial_string(fw, data_path);
+    serial_string(fw, apk_path_string);
+    serial_string(fw, bundle_id);
+    serial_string_vector(fw, global_data.all_files_);
+    serial_partition_vector(fw, global_data.patch_partitions_);
+    serial_uint64(fw, global_data.end_of_file_);
+    ::fclose(fw);
+	unlink(formal_patch_info_path);
+	rename(patch_info_path, formal_patch_info_path);
+	return NULL;
+}
+
+static bool pre_process_all_so_lib(const std::string& bundle_id)
+{
+	DIR* dir = opendir(g_data_file_path);
+	if (dir == NULL)
+	{
+		MY_ERROR("can't access data path:%s", g_data_file_path);
+		return false;		
+	}
+
+    const char* NEW_SO_POSTFIX = ".new";
+    int new_file_postfix_len = strlen(NEW_SO_POSTFIX);
 	
 	char filepath_buffer[256] = {0};
 	struct dirent *ent = NULL;
@@ -168,11 +241,9 @@ static bool pre_process_all_so_lib(const char* const data_path, const std::strin
 		
         const char* filename = ent->d_name;
 		int len = strlen(filename);
-		snprintf(filepath_buffer, sizeof(filepath_buffer), "%s/%s", data_path, filename);
+		snprintf(filepath_buffer, sizeof(filepath_buffer), "%s/%s", g_data_file_path, filename);
 		
-		//rename
-		int new_file_postfix_len = strlen(".new");
-        if (len > new_file_postfix_len && memcmp(filename + len - new_file_postfix_len, ".new", new_file_postfix_len) == 0)
+        if (len > new_file_postfix_len && memcmp(filename + len - new_file_postfix_len, NEW_SO_POSTFIX, new_file_postfix_len) == 0)
 		{
 			std::string so_name = std::string(filename).substr(0, len - new_file_postfix_len);
 			std::string new_filepath = filepath_buffer;
@@ -181,28 +252,16 @@ static bool pre_process_all_so_lib(const char* const data_path, const std::strin
 			rename(new_filepath.c_str(), old_filepath.c_str());
 			chmod(old_filepath.c_str(), 0755);
 			MY_LOG("rename %s to %s", new_filepath.c_str(), old_filepath.c_str());
-			
-			pre_process_so_lib(old_filepath.c_str(), so_name.c_str(), bundle_id);
 			continue;
 		}
-		
-		//link
-		int so_file_postfix_len = strlen(".so");
-        if (len > so_file_postfix_len && memcmp(filename + len - so_file_postfix_len, ".so", so_file_postfix_len) == 0)
-		{			
-			chmod(filepath_buffer, 0755);
-			pre_process_so_lib(filepath_buffer, filename, bundle_id);
-			continue;
-		}	
     }
 	closedir(dir);
 	return true;
-	
 }
 
 static dev_t g_apk_device_id = -1;
 static ino_t g_apk_ino = -1;
-static bool extract_patch_info(const std::string& bundle_id, std::string& default_path, std::string& patch_path)
+static bool extract_patch_info(std::string& default_path, std::string& patch_path)
 {
 	char default_il2cpp_path[256] = {0};
 	snprintf(default_il2cpp_path, sizeof(default_il2cpp_path), "%s/../lib/libil2cpp.so",  g_data_file_path);
@@ -220,31 +279,35 @@ static bool extract_patch_info(const std::string& bundle_id, std::string& defaul
 		return false;
 	}
 	
-	//get patch config
-	std::fstream patch_info_file(patch_info_path, std::fstream::in);
-	if (!patch_info_file.is_open())
-	{	
-		if (g_use_data_path != NULL){delete[] g_use_data_path; g_use_data_path = NULL;}
-		return false;
-	}	
-	char file_content[4096] = {0};
-	patch_info_file.getline(file_content, sizeof(file_content));
-	if (strlen(file_content) == 0)
+    FILE* fp = ::fopen(patch_info_path, "rb");
+	if (fp == NULL) 
 	{
-		MY_ERROR("empty file string");
+		MY_ERROR("can't open:%s, errno:%d", patch_info_path, errno);
 		return false;
 	}
-	patch_info_file.close();
 	
-	//split data_path
-	char* split_pos = strstr( file_content, SPLITER );
-	if(split_pos != NULL)
-	{
-		int spliter_len = strlen(SPLITER);
-		memset(split_pos, 0, spliter_len);
+    uint32_t magic = unserial_uint32(fp);
+	if (magic != 5460){	
+		MY_ERROR("wrong user.db format");
+		return false;
 	}
+    std::string data_path_string = unserial_string(fp);
+	MY_INFO("cached data path:%s", data_path_string.c_str());
 	
-	char* data_path = file_content;
+    std::string apk_path_string = unserial_string(fp);
+	MY_INFO("cached apk_path_string:%s", apk_path_string.c_str());
+	
+    std::string bundle_id = unserial_string(fp);
+	MY_INFO("cached bundle_id:%s", bundle_id.c_str());
+	
+    LeakSingleton<ShadowZipGlobalData, 0>::init();
+    unserial_string_vector(fp, g_shadowzip_global_data->all_files_);
+    unserial_partition_vector(fp, g_shadowzip_global_data->patch_partitions_);
+    g_shadowzip_global_data->end_of_file_ = unserial_uint64(fp);
+    ::fclose(fp);
+	ShadowZip::log(g_shadowzip_global_data);
+	
+	const char* data_path = data_path_string.c_str();
 	DIR* dir = opendir(data_path);
 	if (dir == NULL)
 	{
@@ -254,7 +317,6 @@ static bool extract_patch_info(const std::string& bundle_id, std::string& defaul
 	closedir(dir);
 	
 	//get and save apk file id
-	std::string apk_path_string = get_apk_path(bundle_id);	
 	const char* apk_path = apk_path_string.c_str();
 	struct stat apk_stat;
 	memset(&apk_stat, 0, sizeof(struct stat));
@@ -272,7 +334,7 @@ static bool extract_patch_info(const std::string& bundle_id, std::string& defaul
 		return false;
 	}
 	
-	if (!pre_process_all_so_lib(data_path, bundle_id))
+	if (!pre_process_all_so_lib(bundle_id))
 	{
 		MY_ERROR("can't pre_process_all_so_lib");
 		return false;
@@ -281,18 +343,20 @@ static bool extract_patch_info(const std::string& bundle_id, std::string& defaul
 	char link_file[256] = {0};
 	snprintf(link_file, sizeof(link_file), "%s/libil2cpp.so", g_data_file_path);
 	std::string il2cpp_path(link_file);	
-	FILE *fp = fopen (il2cpp_path.c_str(), "r");
-	if (fp == NULL) 
+	FILE *fi = fopen (il2cpp_path.c_str(), "r");
+	if (fi == NULL) 
 	{
 		MY_ERROR("can't libil2cpp:%s", il2cpp_path.c_str());
 		return false;		   
 	}
-	fclose (fp);
+	fclose (fi);
 	
 	if (g_use_data_path != NULL){delete[] g_use_data_path;}
 	g_use_data_path = dupstr(data_path);
 	if (g_apk_file_path != NULL){delete[] g_apk_file_path;}
 	g_apk_file_path = dupstr(apk_path);
+    if (g_bundle_id != NULL){delete[] g_bundle_id;}
+    g_bundle_id = dupstr(bundle_id.c_str());
 	patch_path = il2cpp_path;
 	return true;
 }
@@ -550,7 +614,6 @@ static void *my_dlopen(const char *filename, int flags)
 	int len = strlen(filename);
 	if (len > il2cpp_postfix_len && memcmp(filename + len - il2cpp_postfix_len, "libil2cpp.so", il2cpp_postfix_len) == 0)
 	{		
-		std::string bundle_id = get_bundle_id();	
 		char link_file[256] = {0};
 		snprintf(link_file, sizeof(link_file), "%s/libil2cpp.so", g_data_file_path);
 		MY_LOG("redirect to %s", link_file);
@@ -670,7 +733,7 @@ static int my_close(int fd)
 	}
 }
 
-static int init_hook(const std::string& bundle_id)
+static int init_hook()
 {
 	/*
 	char path[512] = {0};
@@ -802,16 +865,15 @@ static int init_art_hook()
 
 static void bootstrap()
 {
-	std::string bundle_id = get_bundle_id();
-	
 	std::string default_il2cpp_path;
 	std::string patch_il2cpp_path;
-	bool use_patch = extract_patch_info(bundle_id, default_il2cpp_path, patch_il2cpp_path);
+	bool use_patch = extract_patch_info(default_il2cpp_path, patch_il2cpp_path);
 	
 	if (use_patch){
 		MY_INFO("bootstrap running %s with apk_path:[%s], patch_so:[%s], patch_dir:[%s]", TARGET_ARCH_ABI, 
 			g_apk_file_path, patch_il2cpp_path.c_str(), g_use_data_path);	
-		bool success = (0 == ShadowZip::init(g_use_data_path, g_apk_file_path)) && (0 == init_hook(bundle_id)) && (0 == init_file_mapping_data());
+
+		bool success = (0 == init_hook()) && (0 == init_file_mapping_data());
 		if (success)
 		{
 			MY_INFO("bootstrap running with patch:%s", patch_il2cpp_path.c_str());

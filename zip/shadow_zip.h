@@ -18,10 +18,19 @@ struct FilePartitionInfo
     uint64_t shadow_start_;
     uint64_t shadow_stop_;
 
-    int file_index_;
+    uint64_t file_index_;
     uint64_t start_in_file_;
     uint64_t stop_in_file_;
 };
+
+struct ShadowZipGlobalData
+{
+	PthreadRwMutex mutex;
+    std::vector<FilePartitionInfo> patch_partitions_;
+    std::vector<std::string> all_files_;
+    uint64_t end_of_file_;
+};
+#define g_shadowzip_global_data (LeakSingleton<ShadowZipGlobalData, 0>::instance())
 
 class ShadowZip
 {
@@ -39,7 +48,8 @@ public:
 	char* fgets(char *s, int size, FILE *stream);
     int fclose(FILE* _fp);
 
-    static int init(const char* _patch_dir, const char* _sys_apk_file);
+    static int init(const char* _patch_dir, const char* _sys_apk_file, ShadowZipGlobalData* global_data);
+    static void log(ShadowZipGlobalData* global_data);
 	static uint64_t get_eof_pos();
 	static void output_apk(const char* _patch_dir);
 
