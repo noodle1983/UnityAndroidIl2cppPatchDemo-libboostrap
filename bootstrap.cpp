@@ -486,13 +486,13 @@ static int my_stat(const char *path, struct stat *file_stat)
 
 static ShadowZip* get_cached_shadowzip(FILE *stream)
 {
-	FileExtraData* file_extra_data = get_file_mapping(stream);
+	FileExtraData* file_extra_data = get_mapping(stream);
 	return file_extra_data == NULL ? NULL : file_extra_data->shadow_zip;
 }
 
 static ShadowZip* get_cached_shadowzip(int fd)
 {
-	FileExtraData* file_extra_data = get_file_mapping(fd);
+	FileExtraData* file_extra_data = get_mapping(fd);
 	return file_extra_data == NULL ? NULL : file_extra_data->shadow_zip;
 }
 
@@ -519,7 +519,7 @@ static FILE *my_fopen(const char *path, const char *mode)
 			return fopen(path, mode); 
 		}	
 		
-		FileExtraData* file_extra_data = save_file_mapping(shadow_zip);
+		FileExtraData* file_extra_data = save_mapping(shadow_zip);
 		MY_LOG("shadow apk in fopen: %s, fd:0x%08x, file*: 0x%08llx", path, file_extra_data->fd, (unsigned long long)file_extra_data->file);	
 		return file_extra_data->file;
 	}
@@ -594,7 +594,7 @@ static int my_fclose(FILE* stream)
 {
 	MY_METHOD("my_fclose: file*: 0x%08llx", (unsigned long long)stream);
 	
-	FileExtraData* file_extra_data = get_file_mapping(stream);
+	FileExtraData* file_extra_data = get_mapping(stream);
 	if (file_extra_data != NULL)
 	{
 		clean_mapping_data(file_extra_data);
@@ -655,7 +655,7 @@ static int my_open(const char *path, int flags, ...)
 			return ret;
 		}	
 		
-		FileExtraData* file_extra_data = save_file_mapping(shadow_zip);
+		FileExtraData* file_extra_data = save_mapping(shadow_zip);
 		MY_LOG("shadow apk in open: %s, fd:0x%08x, file*: 0x%08llx", path, file_extra_data->fd, (unsigned long long)file_extra_data->file);	
 		return file_extra_data->fd;
 	}
@@ -721,7 +721,7 @@ static int my_close(int fd)
 {
 	MY_METHOD("my_close: 0x%08x", fd);
 	
-	FileExtraData* file_extra_data = get_file_mapping(fd);
+	FileExtraData* file_extra_data = get_mapping(fd);
 	if (file_extra_data != NULL)
 	{
 		clean_mapping_data(file_extra_data);
@@ -735,71 +735,6 @@ static int my_close(int fd)
 
 static int init_hook()
 {
-	/*
-	char path[512] = {0};
-	snprintf((char*)path, sizeof(path), "libunity.so");
-	void const* addr = get_module_base(path, sizeof(path)-1);
-	MY_INFO("libunity addr:0x%zx, path:%s", (size_t)addr, path);
-	if (addr == NULL){	
-		MY_ERROR("failed to load libunity info");
-		return -1;
-	}
-	
-	void *handle = dlopen(path, RTLD_LAZY);
-	if (!handle) {
-		MY_ERROR("failed to load libunity:%s, error:%s", path, dlerror());
-		return -1;
-	}
-	
-	std::vector<const char*> symbol_names;
-	symbol_names.push_back("fopen");
-	symbol_names.push_back("fseek");
-	symbol_names.push_back("ftell");
-	symbol_names.push_back("fread");
-	symbol_names.push_back("fgets");
-	symbol_names.push_back("fclose");
-	symbol_names.push_back("stat");
-	symbol_names.push_back("dlopen");
-	symbol_names.push_back("open");
-	symbol_names.push_back("read");
-	symbol_names.push_back("lseek");
-	symbol_names.push_back("lseek64");
-	symbol_names.push_back("close");
-	
-	std::vector<void const *> new_func;
-	new_func.push_back((void const *)my_fopen);
-	new_func.push_back((void const *)my_fseek);
-	new_func.push_back((void const *)my_ftell);
-	new_func.push_back((void const *)my_fread);
-	new_func.push_back((void const *)my_fgets);
-	new_func.push_back((void const *)my_fclose);
-	new_func.push_back((void const *)my_stat);
-	new_func.push_back((void const *)my_dlopen);
-	new_func.push_back((void const *)my_open);
-	new_func.push_back((void const *)my_read);
-	new_func.push_back((void const *)my_lseek);
-	new_func.push_back((void const *)my_lseek64);
-	new_func.push_back((void const *)my_close);
-	
-	std::vector<void **> old_func;
-	old_func.push_back((void**)&old_fopen);
-	old_func.push_back((void**)&old_fseek);
-	old_func.push_back((void**)&old_ftell);
-	old_func.push_back((void**)&old_fread);
-	old_func.push_back((void**)&old_fgets);
-	old_func.push_back((void**)&old_fclose);
-	old_func.push_back((void**)&old_stat);
-	old_func.push_back((void**)&old_dlopen);
-	old_func.push_back((void**)&old_open);
-	old_func.push_back((void**)&old_read);
-	old_func.push_back((void**)&old_lseek);
-	old_func.push_back((void**)&old_lseek64);
-	old_func.push_back((void**)&old_close);
-	
-	elf_hook(path, addr, symbol_names, new_func, old_func);
-	
-	//dlclose(handle);
-	*/
 #define HOOK(lib, symbol) \
 	if(0 != xhook_register(lib, #symbol, (void*)my_##symbol, NULL)){ \
 		MY_ERROR("failed to find function:%s in %s", #symbol, lib); \
@@ -873,7 +808,7 @@ static void bootstrap()
 		MY_INFO("bootstrap running %s with apk_path:[%s], patch_so:[%s], patch_dir:[%s]", TARGET_ARCH_ABI, 
 			g_apk_file_path, patch_il2cpp_path.c_str(), g_use_data_path);	
 
-		bool success = (0 == init_hook()) && (0 == init_file_mapping_data());
+		bool success = (0 == init_hook()) && (0 == init_mapping_data());
 		if (success)
 		{
 			MY_INFO("bootstrap running with patch:%s", patch_il2cpp_path.c_str());

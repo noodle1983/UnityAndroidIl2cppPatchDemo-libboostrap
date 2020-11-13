@@ -61,3 +61,28 @@ LOCAL_SHARED_LIBRARIES :=
 include $(BUILD_EXECUTABLE)
 
 ####################################################################################################
+
+####################################################################################################
+#include $(CLEAR_VARS) 
+
+LOCAL_MODULE := test_ashmem
+
+LOCAL_MODULE_FILENAME := test_ashmem
+
+cmd-strip = $(TOOLCHAIN_PREFIX)strip --strip-unneeded -x $1
+
+LOCAL_SRC_FILES := unittest/test_ashmem.cpp
+
+LOCAL_CFLAGS :=  -g -O0 -fvisibility=hidden -pie -fPIE
+LOCAL_CPPFLAGS := -g -O0 -std=c++11 -fvisibility=hidden -pie -fPIE
+
+LOCAL_LDFLAGS += -pie -fPIE
+LOCAL_LDLIBS := -llog -L$(LOCAL_PATH)/../../libs/$(TARGET_ARCH_ABI)
+
+LOCAL_C_INCLUDES  += system/core/include/cutils
+
+LOCAL_SHARED_LIBRARIES := 
+
+include $(BUILD_EXECUTABLE)
+
+####################################################################################################
