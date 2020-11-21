@@ -6,6 +6,9 @@
 #include <dirent.h>
 #include <assert.h>
 #include <string.h>
+#include <fstream>
+#include <set>
+#include <algorithm>
 
 using namespace android;
 
@@ -37,6 +40,8 @@ static void get_files(const char* _apk_patch_path, std::vector<std::string>& _fi
     }  
     closedir(dir);
 }
+
+static bool is_illegal_path_char(char ch){return ch == '\r' || ch == '\n' || ch == '"' || ch == '\'';}
 
 static int parse_apk(const char* _path, std::vector<ZipEntry*>& _all_entries)
 {
@@ -322,6 +327,23 @@ int ShadowZip::init(const char* _patch_dir, const char* _sys_apk_file, ShadowZip
         MY_INFO("no apk patches:[%s/assets_bin_Data]", _patch_dir);
         return -1;
     }
+	
+	//all removed files
+    char removed_files_path[512] = {0};
+    snprintf(removed_files_path, sizeof(removed_files_path), "%s/removed_files.txt", _patch_dir );
+	std::set<std::string> removed_files;
+	std::ifstream rmfiles_stream(removed_files_path);
+	if (rmfiles_stream.good()){
+		std::string line;
+		while( std::getline( rmfiles_stream, line ) ) {
+			line.erase(std::remove_if(line.begin(), line.end(), is_illegal_path_char), line.end());
+			if (line.length() == 0){continue;}	
+			MY_INFO("remove file: [%s]", line.c_str());
+			removed_files.insert(line);
+		}
+		rmfiles_stream.close();
+	}
+	
 
     //find all entries in patches
     std::vector<std::vector<ZipEntry*> > entries_in_zip_file(global_data->all_files_.size());
@@ -337,7 +359,7 @@ int ShadowZip::init(const char* _patch_dir, const char* _sys_apk_file, ShadowZip
             return -1;
         }
         for(int j = 0; j < zip_entries.size(); j++)
-        {
+        {			
             ZipEntry* entry = zip_entries[j];
             entry->mUserData1 = i;
             std::string filename = entry->getFileName();
@@ -347,6 +369,11 @@ int ShadowZip::init(const char* _patch_dir, const char* _sys_apk_file, ShadowZip
                 clean_file_entries_map(entries_in_zip_file);
                 return -1;
             }
+			
+			if (removed_files.find(filename) != removed_files.end()){
+				MY_LOG("rm file:%s in %s", filename.c_str(), zip_path.c_str());
+				continue;
+			}
             filename_2_entry[filename] = entry;
         }
     }
@@ -370,7 +397,11 @@ int ShadowZip::init(const char* _patch_dir, const char* _sys_apk_file, ShadowZip
     for(int i = 0; i < apk_entries.size(); i++)
     {
         ZipEntry* entry = apk_entries[i];
-        std::string name(entry->getFileName());
+        std::string name(entry->getFileName());	
+		if (removed_files.find(name) != removed_files.end()){
+			MY_LOG("rm file:%s in apk", name.c_str());
+			continue;
+		}
         std::map<std::string, ZipEntry*>::iterator it = filename_2_entry.find(name);
         if (it != filename_2_entry.end()){ entry = it->second; }
         entry->mUserData2 = 1;
@@ -642,6 +673,8 @@ FILE* ShadowZip::prepare_file(int _file_index)
     }
 	MY_METHOD("prepare_file %s -> 0x%08zx", path.c_str(), (size_t)fp);
     fp_array_[_file_index] = fp;
+	
+	setvbuf( fp , NULL , _IOFBF , 1024);
     return fp;
 }
 
