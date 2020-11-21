@@ -654,7 +654,8 @@ FILE* ShadowZip::prepare_file(int _file_index)
         return fp_array_[_file_index];
     }
 	
-	//incace of too many file opened, close all except base.apk
+	//in cace of too many file opened, close all except base.apk
+	//but if you have only one patch file including everything, you can comment these to get a better performance. The max open files may reach to 100.
 	for(int i = 1; i < fp_array_.size(); i++) 
     {
 		FILE* fp = fp_array_[i];
@@ -674,6 +675,8 @@ FILE* ShadowZip::prepare_file(int _file_index)
 	MY_METHOD("prepare_file %s -> 0x%08zx", path.c_str(), (size_t)fp);
     fp_array_[_file_index] = fp;
 	
+	//if you have only one patch file including everything, the reading index can be random each time. a smaller buffer size performs better.
+	//for others, 1024 is also fair enough.
 	setvbuf( fp , NULL , _IOFBF , 1024);
     return fp;
 }

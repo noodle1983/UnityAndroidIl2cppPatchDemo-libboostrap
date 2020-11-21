@@ -1,0 +1,1 @@
+adb push libs/x86/test_pthread_mutex /data/local/tmp/ && adb push libs/x86/test_ashmem /data/local/tmp/ && pause

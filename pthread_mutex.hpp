@@ -15,25 +15,28 @@
 
 
 #include <pthread.h>
+#include "pthread_spin_lock.h"
 //#include "log.h"
 
 class PthreadMutex  
 {
 public:
-    PthreadMutex(){pthread_mutex_init(&mutexlock, 0);}
-    virtual ~PthreadMutex(){pthread_mutex_destroy(&mutexlock);}
+    PthreadMutex(){pthread_spin_init(&mutexlock, 0);}
+    virtual ~PthreadMutex(){pthread_spin_destroy(&mutexlock);}
 
     void Lock(){
-		pthread_mutex_lock(&mutexlock);
+		pthread_spin_lock(&mutexlock);
 		//MY_METHOD("lock at mutex: 0x%08llx", (unsigned long long)&mutexlock);
 	}
     void Unlock(){	
 		//MY_METHOD("unlock at mutex: 0x%08llx", (unsigned long long)&mutexlock);
-		pthread_mutex_unlock(&mutexlock);
+		pthread_spin_unlock(&mutexlock);
 	}
 private:
-    pthread_mutex_t mutexlock;
+    pthread_spinlock_t mutexlock;
 };
+
+
 
 typedef PthreadMutex PthreadRwMutex;
 
