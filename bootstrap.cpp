@@ -10,8 +10,16 @@
 #include "xhook/xhook.h"
 #include "io_github_noodle1983_Boostrap.h"
 #include "mymap32.h"
-#include "file_mapping.h"
 #include "serial_utils.h"
+
+
+struct GlobalData
+{	
+	std::map<int, FILE*> g_fd_to_file;	
+	std::map<FILE*, ShadowZip*> g_file_to_shadowzip;
+	PthreadRwMutex g_file_to_shadowzip_mutex;
+};
+#define g_global_data (LeakSingleton<GlobalData, 0>::instance())
 
 
 static inline char * dupstr(const char* const str)
@@ -41,6 +49,7 @@ JNIEXPORT void JNICALL Java_io_github_noodle1983_Boostrap_init
 	jenv->ReleaseStringUTFChars(path, data_file_path);
 	MY_INFO("data file path:%s", g_data_file_path);
 	
+	LeakSingleton<GlobalData, 0>::init();
 	bootstrap();
 }
 
@@ -486,14 +495,21 @@ static int my_stat(const char *path, struct stat *file_stat)
 
 static ShadowZip* get_cached_shadowzip(FILE *stream)
 {
-	FileExtraData* file_extra_data = get_mapping(stream);
-	return file_extra_data == NULL ? NULL : file_extra_data->shadow_zip;
+	PthreadReadGuard(g_global_data->g_file_to_shadowzip_mutex);
+	std::map<FILE*, ShadowZip*>::iterator it = g_global_data->g_file_to_shadowzip.find(stream);
+	ShadowZip* shadow_zip = (it == g_global_data->g_file_to_shadowzip.end()) ? NULL : it->second;
+	return shadow_zip;
 }
 
 static ShadowZip* get_cached_shadowzip(int fd)
 {
-	FileExtraData* file_extra_data = get_mapping(fd);
-	return file_extra_data == NULL ? NULL : file_extra_data->shadow_zip;
+ 	PthreadReadGuard(g_global_data->g_file_to_shadowzip_mutex);
+	std::map<int, FILE*>::iterator it_fd = g_global_data->g_fd_to_file.find(fd);
+	FILE* stream = (it_fd == g_global_data->g_fd_to_file.end()) ? NULL : it_fd->second;
+ 	if (stream == NULL){return NULL;}
+	std::map<FILE*, ShadowZip*>::iterator it = g_global_data->g_file_to_shadowzip.find(stream);
+	ShadowZip* shadow_zip = (it == g_global_data->g_file_to_shadowzip.end()) ? NULL : it->second;
+ 	return shadow_zip;
 }
 
 typedef FILE *(* FOpenType)(const char *path, const char *mode);
@@ -519,9 +535,10 @@ static FILE *my_fopen(const char *path, const char *mode)
 			return fopen(path, mode); 
 		}	
 		
-		FileExtraData* file_extra_data = save_mapping(shadow_zip);
-		MY_LOG("shadow apk in fopen: %s, fd:0x%08x, file*: 0x%08llx", path, file_extra_data->fd, (unsigned long long)file_extra_data->file);	
-		return file_extra_data->file;
+		MY_LOG("shadow apk in fopen: %s, fd:0x%08x, file*: 0x%08llx", path, fileno(fp), (unsigned long long)fp);
+ 		PthreadWriteGuard(g_global_data->g_file_to_shadowzip_mutex);
+		g_global_data->g_file_to_shadowzip[fp] = shadow_zip;
+ 		return fp;
 	}
 	
 	MY_METHOD("not apk([%s],[%s])", path, mode);
@@ -593,17 +610,30 @@ typedef int (*FcloseType)(FILE* _fp);
 static int my_fclose(FILE* stream)
 {
 	MY_METHOD("my_fclose: file*: 0x%08llx", (unsigned long long)stream);
-	
-	FileExtraData* file_extra_data = get_mapping(stream);
-	if (file_extra_data != NULL)
+ 	
+ 	ShadowZip* shadow_zip = NULL;
 	{
-		clean_mapping_data(file_extra_data);
-		return 0;
-	}
-	else
-	{
-		return fclose(stream);		
-	}
+ 		PthreadWriteGuard(g_global_data->g_file_to_shadowzip_mutex);
+		std::map<FILE*, ShadowZip*>::iterator it = g_global_data->g_file_to_shadowzip.find(stream);
+		shadow_zip = (it == g_global_data->g_file_to_shadowzip.end()) ? NULL : it->second;
+		if (it != g_global_data->g_file_to_shadowzip.end()){
+			g_global_data->g_file_to_shadowzip.erase(it);
+		}	
+		
+		int fd = fileno(stream);
+		MY_METHOD("my_fclose: fd: 0x%08x, file*: 0x%08llx", fd, (unsigned long long)stream);
+		std::map<int, FILE*>::iterator it_fd = g_global_data->g_fd_to_file.find(fd);
+		if(it_fd != g_global_data->g_fd_to_file.end()) 
+ 		{
+			g_global_data->g_fd_to_file.erase(it_fd);
+ 		}	
+ 	}
+ 	
+ 	if (shadow_zip == NULL){
+ 		return fclose(stream);
+ 	}else{
+		return shadow_zip->fclose(stream);
+ 	}
 }
 
 typedef void *(*DlopenType)(const char *filename, int flags);
@@ -655,9 +685,12 @@ static int my_open(const char *path, int flags, ...)
 			return ret;
 		}	
 		
-		FileExtraData* file_extra_data = save_mapping(shadow_zip);
-		MY_LOG("shadow apk in open: %s, fd:0x%08x, file*: 0x%08llx", path, file_extra_data->fd, (unsigned long long)file_extra_data->file);	
-		return file_extra_data->fd;
+		int fd = fileno(fp);
+		MY_LOG("shadow apk: %s, fd:0x%08x, file*: 0x%08llx", path, fd, (unsigned long long)fp);
+ 		PthreadWriteGuard(g_global_data->g_file_to_shadowzip_mutex);
+		g_global_data->g_fd_to_file[fd] = fp;
+		g_global_data->g_file_to_shadowzip[fp] = shadow_zip;
+		return fd;
 	}
 	
 	int ret = has_mode ? open(path, flags, mode) : open(path, flags);
@@ -719,18 +752,27 @@ off64_t my_lseek64(int fd, off64_t offset, int whence)
 typedef int (*CloseType)(int fd);
 static int my_close(int fd)
 {
-	MY_METHOD("my_close: 0x%08x", fd);
-	
-	FileExtraData* file_extra_data = get_mapping(fd);
-	if (file_extra_data != NULL)
-	{
-		clean_mapping_data(file_extra_data);
-		return 0;
-	}
-	else
-	{
-		return close(fd);	
-	}
+	ShadowZip* shadow_zip = NULL;
+ 	{
+ 		PthreadWriteGuard(g_global_data->g_file_to_shadowzip_mutex);
+		std::map<int, FILE*>::iterator it_fd = g_global_data->g_fd_to_file.find(fd);
+		FILE* stream = (it_fd == g_global_data->g_fd_to_file.end()) ? NULL : it_fd->second;		
+		if (stream == NULL){return close(fd);}
+		g_global_data->g_fd_to_file.erase(it_fd);
+			
+		MY_METHOD("my_close: fd: 0x%08x, file*: 0x%08llx", fd, (unsigned long long)stream);
+		std::map<FILE*, ShadowZip*>::iterator it = g_global_data->g_file_to_shadowzip.find(stream);
+		shadow_zip = (it == g_global_data->g_file_to_shadowzip.end()) ? NULL : it->second;
+		if (it != g_global_data->g_file_to_shadowzip.end()){
+			g_global_data->g_file_to_shadowzip.erase(it);
+		}
+ 	}
+ 	
+ 	if (shadow_zip == NULL){
+ 		return close(fd);
+ 	}else{
+		return shadow_zip->fclose((FILE*)(size_t)fd);
+ 	}
 }
 
 static int init_hook()
@@ -808,7 +850,7 @@ static void bootstrap()
 		MY_INFO("bootstrap running %s with apk_path:[%s], patch_so:[%s], patch_dir:[%s]", TARGET_ARCH_ABI, 
 			g_apk_file_path, patch_il2cpp_path.c_str(), g_use_data_path);	
 
-		bool success = (0 == init_hook()) && (0 == init_mapping_data());
+		bool success = (0 == init_hook());
 		if (success)
 		{
 			MY_INFO("bootstrap running with patch:%s", patch_il2cpp_path.c_str());
