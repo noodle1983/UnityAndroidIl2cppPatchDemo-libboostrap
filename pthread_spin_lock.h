@@ -34,8 +34,7 @@ static inline int pthread_spin_trylock(pthread_spinlock_t *lock) {
 }
 
 static inline int pthread_spin_unlock(pthread_spinlock_t *lock) {
-	__asm__ __volatile__ ("" ::: "memory");
-	*lock = 0;
+	__sync_sub_and_fetch(lock, 1);
 	return 0;
 }
 
