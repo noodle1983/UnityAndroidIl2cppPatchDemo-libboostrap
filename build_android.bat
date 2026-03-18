@@ -1,1 +1,1 @@
-(ndk-build NDK_PROJECT_PATH=.  APP_BUILD_SCRIPT=Android.mk  NDK_APPLICATION_MK=Application.mk APP_ABI="armeabi-v7a x86 arm64-v8a" || pause) && pause 
+(ndk-build NDK_PROJECT_PATH=.  APP_BUILD_SCRIPT=Android.mk  NDK_APPLICATION_MK=Application.mk APP_ABI="armeabi-v7a x86 arm64-v8a" APP_LDFLAGS="-Wl,-z,max-page-size=16384 -Wl,-z,common-page-size=16384" || pause) && pause 

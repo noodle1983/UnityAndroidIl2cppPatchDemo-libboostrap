@@ -6,7 +6,9 @@
 #define PTHREAD_SPIN_LOCK_SHIM
 
 #include <errno.h>
+#include <pthread.h>
 
+#if __ANDROID_API__ < 24
 typedef int pthread_spinlock_t;
 
 static inline int pthread_spin_init(pthread_spinlock_t *lock, int pshared) {
@@ -37,5 +39,5 @@ static inline int pthread_spin_unlock(pthread_spinlock_t *lock) {
 	__sync_sub_and_fetch(lock, 1);
 	return 0;
 }
-
+#endif
 #endif

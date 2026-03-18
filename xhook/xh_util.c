@@ -37,6 +37,12 @@
 #include "xh_errno.h"
 #include "xh_log.h"
 
+#ifndef PAGE_SIZE
+#define PAGE_SIZE 4096
+#endif
+#ifndef PAGE_MASK
+#define PAGE_MASK (~(PAGE_SIZE - 1))
+#endif
 #define PAGE_START(addr) ((addr) & PAGE_MASK)
 #define PAGE_END(addr)   (PAGE_START(addr + sizeof(uintptr_t) - 1) + PAGE_SIZE)
 #define PAGE_COVER(addr) (PAGE_END(addr) - PAGE_START(addr))

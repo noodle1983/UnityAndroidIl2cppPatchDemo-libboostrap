@@ -8,8 +8,6 @@ LOCAL_MODULE := bootstrap
 
 LOCAL_MODULE_FILENAME := libbootstrap
 
-cmd-strip = $(TOOLCHAIN_PREFIX)strip --strip-unneeded -x $1
-
 LOCAL_SRC_FILES := \
 	xhook/xhook.c \
     xhook/xh_core.c \
@@ -44,14 +42,15 @@ LOCAL_MODULE := test_pthread_mutex
 
 LOCAL_MODULE_FILENAME := test_pthread_mutex
 
-cmd-strip = $(TOOLCHAIN_PREFIX)strip --strip-unneeded -x $1
-
 LOCAL_SRC_FILES := unittest/test_mutex.cpp
 
 LOCAL_CFLAGS :=  -g -O0 -fvisibility=hidden -pie -fPIE
 LOCAL_CPPFLAGS := -g -O0 -std=c++11 -fvisibility=hidden -pie -fPIE
 
 LOCAL_LDFLAGS += -pie -fPIE
+LOCAL_LDFLAGS += -Wl,-z,max-page-size=16384
+LOCAL_LDFLAGS += -Wl,-z,common-page-size=16384
+
 LOCAL_LDLIBS := -llog -L$(LOCAL_PATH)/../../libs/$(TARGET_ARCH_ABI)
 
 LOCAL_C_INCLUDES  += system/core/include/cutils
@@ -68,8 +67,6 @@ include $(BUILD_EXECUTABLE)
 LOCAL_MODULE := test_ashmem
 
 LOCAL_MODULE_FILENAME := test_ashmem
-
-cmd-strip = $(TOOLCHAIN_PREFIX)strip --strip-unneeded -x $1
 
 LOCAL_SRC_FILES := unittest/test_ashmem.cpp
 
